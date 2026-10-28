@@ -1,7 +1,7 @@
 'use client';
 
 import {metricFor,metricStops,type MetricDefinition,type DataAvailability} from '@/lib/metrics';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { APP_CONFIG, basemapById, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
 import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type PlaceToggles } from '@/lib/mapLayers';
@@ -90,6 +90,8 @@ export function LayersPanel(p: Props) {
   const [tab, setTab] = useState<PanelTab>('data');
   const [topic, setTopic] = useState('Popular');
   const [query, setQuery] = useState('');
+  const content = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (content.current) content.current.scrollTop = 0; }, [tab, topic, query]);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('pc-options-view') ?? '{}');
@@ -135,7 +137,7 @@ export function LayersPanel(p: Props) {
         </div>
       </header>
 
-      <div id={`${prefix}-panel`} role="tabpanel" aria-labelledby={`${prefix}-${tab}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div ref={content} id={`${prefix}-panel`} role="tabpanel" aria-labelledby={`${prefix}-${tab}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {tab === 'data' && <>
           <div className="sticky top-0 z-10 border-b border-line bg-surface px-4 py-3">
             <label htmlFor={`${prefix}-search`} className="sr-only">Find a data layer</label>
