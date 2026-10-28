@@ -14,7 +14,7 @@ interface Props {
 const EMPTY_RECORDS:CrimeRecord[]=[];
 const field='mt-1 min-h-10 w-full rounded-lg border border-line bg-surface px-2.5 text-[12px] text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent';
 export function CrimeExplorer({data,selection,named,getCentre,onRecords,onLocate}:Props){
- const pending=useRef<AbortController|null>(null);
+ const pending=useRef<AbortController|null>(null);const initialised=useRef(false);
  const [months,setMonths]=useState<string[]>([]),[month,setMonth]=useState('');
  const [periodMode,setPeriodMode]=useState('month'),[year,setYear]=useState(''),[end,setEnd]=useState('');
  const [applied,setApplied]=useState<ReturnType<typeof periodMonths>|null>(null),[periodError,setPeriodError]=useState(''),[progress,setProgress]=useState(0);
@@ -23,7 +23,7 @@ export function CrimeExplorer({data,selection,named,getCentre,onRecords,onLocate
  const [coverageFailed,setCoverageFailed]=useState(false),[scopeError,setScopeError]=useState(''),[availabilityError,setAvailabilityError]=useState('');
  const [result,setResult]=useState<{scope:CrimeScope;period:NonNullable<typeof applied>;data:CrimePeriodResult}|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
  const [retry,setRetry]=useState(0),[query,setQuery]=useState(''),[limit,setLimit]=useState(40),[active,setActive]=useState<number|null>(null);
- useEffect(()=>{const c=new AbortController();setAvailabilityError('');crimeMonths(c.signal).then(m=>{setMonths(m);setMonth(old=>m.includes(old)?old:m[0]);setEnd(old=>old||m[0]);setYear(old=>old||m[0].slice(0,4));setApplied(old=>old??periodMonths(m,'month',m[0]));},e=>{if(!c.signal.aborted)setAvailabilityError(e.message);});loadCrimeCoverage(data.baseUrl,c.signal).then(v=>{setCoverage(v);setCoverageFailed(false);},()=>{if(!c.signal.aborted)setCoverageFailed(true);});return()=>c.abort();},[data,retry]);
+ useEffect(()=>{const c=new AbortController();setAvailabilityError('');crimeMonths(c.signal).then(m=>{setMonths(m);if(!initialised.current){initialised.current=true;let saved={mode:'month',value:m[0],end:m[0]};try{const raw=JSON.parse(sessionStorage.getItem('pc-crime-period')??'null');if(raw&&['month','year','rolling','range'].includes(raw.mode)){periodMonths(m,raw.mode,raw.value,raw.end);saved=raw;}}catch{}setPeriodMode(saved.mode);setMonth(saved.mode==='year'?m[0]:saved.value||m[0]);setYear(saved.mode==='year'?saved.value:m[0].slice(0,4));setEnd(saved.end||m[0]);setApplied(periodMonths(m,saved.mode,saved.value,saved.end));}},e=>{if(!c.signal.aborted)setAvailabilityError(e.message);});loadCrimeCoverage(data.baseUrl,c.signal).then(v=>{setCoverage(v);setCoverageFailed(false);},()=>{if(!c.signal.aborted)setCoverageFailed(true);});return()=>c.abort();},[data,retry]);
  useEffect(()=>{let live=true;setScope(null);setScopeError('');selectedCrimeScope(data,selection,named,getCentre()).then(s=>{if(live)setScope(s);},e=>{if(live)setScopeError(e.message);});return()=>{live=false;};},[data,selection,named,getCentre,retry]);
  useEffect(()=>{
   if(!scope||!applied)return;const c=new AbortController();pending.current=c;setLoading(true);setProgress(0);setError('');setResult(null);setActive(null);setLimit(40);
@@ -56,7 +56,7 @@ export function CrimeExplorer({data,selection,named,getCentre,onRecords,onLocate
    <div className="mt-2 grid grid-cols-2 items-end gap-2">
     {periodMode==='year'?<label className="text-[11px] text-muted">Calendar year<select aria-label="Crime year" className={field} value={year} onChange={e=>setYear(e.target.value)}>{[...new Set(months.map(m=>m.slice(0,4)))].map(y=><option key={y}>{y}</option>)}</select></label>:periodMode!=='rolling'&&<label className="text-[11px] text-muted">{periodMode==='range'?'From':'Month'}<select aria-label="Crime month" className={field} value={month} onChange={e=>setMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}</select></label>}
     {periodMode==='range'&&<label className="text-[11px] text-muted">To<select aria-label="Crime end month" className={field} value={end} onChange={e=>setEnd(e.target.value)}>{months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}</select></label>}
-    <button type="button" disabled={!months.length||loading} onClick={()=>{try{setApplied(periodMonths(months,periodMode,periodMode==='year'?year:month,end));setPeriodError('');}catch(e){setPeriodError((e as Error).message);}}} className="min-h-10 rounded-lg bg-accent px-3 text-[12px] font-semibold text-white disabled:opacity-50">Apply period</button>
+    <button type="button" disabled={!months.length||loading} onClick={()=>{try{const value=periodMode==='year'?year:month;setApplied(periodMonths(months,periodMode,value,end));setPeriodError('');try{sessionStorage.setItem('pc-crime-period',JSON.stringify({mode:periodMode,value,end}));}catch{}}catch(e){setPeriodError((e as Error).message);}}} className="min-h-10 rounded-lg bg-accent px-3 text-[12px] font-semibold text-white disabled:opacity-50">Apply period</button>
    </div>
    <p className="mt-2 text-[11px] text-muted">Showing: {applied?.label??'Loading availability…'}{applied&&applied.months.length<applied.expected?` (${applied.months.length}/${applied.expected} published months)`:''}</p>
    {periodError&&<p role="alert" className="mt-2 text-[12px] text-danger">{periodError}</p>}

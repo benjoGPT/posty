@@ -268,15 +268,16 @@ export class MapController {
   }
 
   setMetricOverlays(overlays:MetricOverlay[]):void {
+    const previous=this.metricOverlays;
     this.metricOverlays=overlays.filter(o=>metricFor('metric:'+o.id)).slice(0,2);
     if(!this.map.getLayer('units-circle'))return;
-    for(let i=0;i<2;i++)for(const level of REGION_LEVELS){const id=`metric-overlay-${i}-${level}`;if(this.map.getLayer(id))this.map.removeLayer(id);}
+    for(let i=0;i<2;i++)for(const level of REGION_LEVELS){const id=`metric-overlay-${i}-${level}`;if(!this.map.getLayer(id))continue;if(previous[i]?.id===this.metricOverlays[i]?.id&&this.metricOverlays[i])this.map.setPaintProperty(id,'circle-opacity',this.metricOverlays[i].opacity);else{this.map.removeLayer(id);delete this.visibility[id];}}
     this.renderMetricOverlays();
   }
   private renderMetricOverlays():void {
     if(!this.map.getLayer('units-circle'))return;
     const level=this.level==='units'?'sectors':this.level;
-    this.metricOverlays.forEach((overlay,i)=>{const metric=metricFor('metric:'+overlay.id);if(!metric)return;for(const l of REGION_LEVELS){const id=`metric-overlay-${i}-${l}`;if(!this.map.getLayer(id))this.map.addLayer(metricOverlayLayer(id,SOURCE[l],metric,i,overlay.opacity));this.map.setLayoutProperty(id,'visibility',l===level?'visible':'none');}});
+    this.metricOverlays.forEach((overlay,i)=>{const metric=metricFor('metric:'+overlay.id);if(!metric)return;for(const l of REGION_LEVELS){const id=`metric-overlay-${i}-${l}`;if(!this.map.getLayer(id))this.map.addLayer(metricOverlayLayer(id,SOURCE[l],metric,i,overlay.opacity));const shown=l===level;if(this.visibility[id]!==shown){this.visibility[id]=shown;this.map.setLayoutProperty(id,'visibility',shown?'visible':'none');}}});
   }
 
   setColourMode(mode: ColourMode): void {

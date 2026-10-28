@@ -11,8 +11,9 @@ export function deriveValues(v:Record<string,number>):Record<string,number>{
  const out={...v};if(Number.isFinite(v.children)&&Number.isFinite(v.older)){const working=100-v.children-v.older;if(working>0&&working<=100){out.working_age=working;out.age_dependency=(v.children+v.older)/working*100;}}
  if(Number.isFinite(v.gigabit)&&v.gigabit>=0&&v.gigabit<=100)out.gigabit_gap=100-v.gigabit;return out;
 }
+const sourceMonth=(ym:number)=>new Date(Date.UTC(Math.floor(ym/100),ym%100-1,1)).toLocaleDateString('en-GB',{month:'short',year:'numeric',timeZone:'UTC'});
 export function analysisMetrics(data:PostcodeData):MetricDefinition[]{
- return [{id:'sale_median',title:'Median sale price',topic:'Housing',unit:'£',stops:[100000,200000,300000,500000,1000000],precision:0,status:'available',period:'Oct 2023–Sept 2026',source:'https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads',note:'Standard registered sales in the source extract, at least five sales. Recent registrations can be incomplete; fewer than 20 sales is a small sample.'},
+ return [{id:'sale_median',title:'Median sale price',topic:'Housing',unit:'£',stops:[100000,200000,300000,500000,1000000],precision:0,status:'available',period:data.manifest.prices?`${sourceMonth(data.manifest.prices.from36)}–${sourceMonth(data.manifest.prices.latestMonth)}`:'Registered source extract',source:'https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads',note:'Standard registered sales in the source extract, at least five sales. Recent registrations can be incomplete; fewer than 20 sales is a small sample.'},
  {id:'imd_decile',title:'English deprivation mean decile',topic:'People',unit:'decile',stops:[1,3,5,7,10],precision:1,status:'available',period:'IMD 2025',source:'https://www.gov.uk/government/statistics/english-indices-of-deprivation-2025',note:'Postcode-weighted mean decile of matched English records only. 1 most deprived, 10 least. This is not an area’s national rank.'},...(data.community?.metrics??[]).filter(m=>m.status==='available')];
 }
 export async function loadRows(data:PostcodeData,kind:string,area?:string):Promise<DataRow[]>{
@@ -27,11 +28,11 @@ export async function loadComparedRow(data:PostcodeData,code:string,kind:string)
  const rows=await loadRows(data,kind,kind==='area'?undefined:areaOf(code));const row=rows.find(r=>r.code===code);if(!row)throw new Error(`No ${kind} ${code} is available.`);return row;
 }
 export function difference(a:number|undefined,b:number|undefined,unit:string,precision=1):string {
- if(a==null||b==null||!Number.isFinite(a)||!Number.isFinite(b))return 'No comparable data';const d=b-a,n=Math.abs(d).toLocaleString('en-GB',{maximumFractionDigits:precision});const sign=d>0?'+':d<0?'−':'';
+ if(a==null||b==null||!Number.isFinite(a)||!Number.isFinite(b))return 'No comparable data';const d=b-a,n=Math.abs(d).toLocaleString('en-GB',{maximumFractionDigits:precision});const rounded=Number(Math.abs(d).toFixed(precision));const sign=rounded===0?'':d>0?'+':'−';
  return unit==='%'||unit==='% change'?`${sign}${n} percentage points`:unit==='£'?`${sign}£${n}`:`${sign}${n} ${unit}`;
 }
 export function sortRows(rows:DataRow[],key:string,descending:boolean):DataRow[]{
  return [...rows].sort((a,b)=>{if(key==='code')return (descending?-1:1)*a.code.localeCompare(b.code,'en-GB',{numeric:true});const x=a.values[key],y=b.values[key];if(x==null)return y==null?a.code.localeCompare(b.code):1;if(y==null)return -1;return (descending?y-x:x-y)||a.code.localeCompare(b.code);});
 }
-export function csvCell(value:unknown):string{const s=String(value??'');return '"'+(/^[=+\-@\t\r]/.test(s)?"'"+s:s).replaceAll('"','""')+'"';}
+export function csvCell(value:unknown):string{const s=String(value??'');return '"'+(typeof value!=='number'&&/^[=+\-@\t\r]/.test(s)?"'"+s:s).replaceAll('"','""')+'"';}
 export function downloadCsv(name:string,rows:unknown[][]){const content='\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
