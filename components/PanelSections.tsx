@@ -121,6 +121,7 @@ export function UnitPrices({ sales, sector, sectorCode, period, covered }: {
 }
 
 const NEARBY_ORDER: { kind: PlaceKind; title: string }[] = [
+  {kind:'supermarkets',title:'Supermarkets'},{kind:'pharmacies',title:'Pharmacies'},{kind:'parks',title:'Mapped green spaces'},
   { kind: 'postboxes', title: 'Postbox' },
   { kind: 'stations', title: 'Station' },
   { kind: 'stops', title: 'Bus stop' },

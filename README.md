@@ -28,6 +28,9 @@ postcode.
 - Click any region or postcode for details: hierarchy, coordinates, positional quality,
   administrative geography, data source and release, copy and share buttons
 - Desktop side panel, mobile draggable bottom sheet
+- **Community data:** grouped heat maps for population/age, housing/tenure/crowding, broadband availability, recorded crime and trends, access to services and green space. Each displays its source, period and limits; unavailable values stay grey.
+- **Compare:** choose two areas, districts or sectors at the same level to compare metrics, prices and deprivation.
+- **Environment:** England river/sea flood overlay at zoom13+; extra supermarkets, pharmacies and green-space markers in detail areas. EPC/planning importers are ready, with availability notices until suitable exports are supplied.
 - **Colour coding**: regions in four colours so neighbours never match, or shaded by postcode density, or outlines only
 - **Map styles**: Light, Streets, Bright, Dark and Minimal (offline)
 - **Find my nearest postcode** (device location), nearby postcodes, "Open in Google Maps"
@@ -44,7 +47,7 @@ postcode.
 
 ## Run it locally
 
-Requires Node.js 20+.
+Requires Node.js 20+. Community data rebuilding also needs Python3.12 and `pip install -r pipeline/requirements-community.txt`.
 
 ```bash
 npm install

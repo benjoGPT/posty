@@ -1,4 +1,5 @@
 'use client';
+import {metricFor} from '@/lib/metrics';
 
 import { useState } from 'react';
 import { LEVEL_LABELS, LEVELS, type Level } from '@/lib/levels';
@@ -67,6 +68,7 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
           <span>Colours only keep neighbouring regions apart; they don’t mean anything else.</span>
         </div>
       )}
+      {metricFor(colourMode) && <p className="mt-2 text-faint">{metricFor(colourMode)?.note}</p>}
       {colourMode === 'deprivation' && <p className="mt-2 text-faint">English IMD 2025, postcode-weighted mean LSOA decile. Not a population-weighted score. Mixed-border regions show English records only. Grey means unavailable.</p>}
       {colourMode === 'growth' && <p className="mt-2 text-faint">Two complete calendar years, minimum 20 sales each. Different properties sell each year; this is not individual property appreciation. Grey means insufficient data.</p>}
       {colourMode === 'prices' && (
@@ -75,6 +77,7 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
         </p>
       )}
 
+      {borders.flood && <p className="mt-2 text-warn">EA river/sea flood bands, England only, zoom 13+. High ≥3.3%, medium 1–3.3%, low 0.1–1%, very low &lt;0.1% annual chance. No surface-water data here. <a className="underline" href="https://www.gov.uk/check-long-term-flood-risk" target="_blank" rel="noreferrer">Official risk check</a></p>}
       {(borders.countries || borders.councils) && (
         <ul className="mt-2.5 space-y-1 border-t border-line pt-2 text-muted">
           {borders.countries && (

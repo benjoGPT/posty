@@ -1,5 +1,6 @@
 'use client';
 
+import {CommunityStats} from './CommunityStats';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { AdminBreakdown, NearbyPlace, PostcodeData, RegionProps } from '@/lib/data';
 import { AboutPostcode, Nearby, RegionPrices, UnitPrices } from './PanelSections';
@@ -22,6 +23,7 @@ interface Props {
   onShare: () => void;
   onClose: () => void;
   onShowPlace: (p: NearbyPlace) => void;
+  onCompare?: (code:string,kind:RegionKind)=>void;
 }
 
 // ONSPD positional quality indicator (osgrdind).
@@ -174,10 +176,11 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
           </div>
         </div>
       )}
-      <div className="flex gap-2 px-4 pb-3.5">
+      <div className="flex flex-wrap gap-2 px-4 pb-3.5">
         <ActionButton onClick={() => onCopy(sel.code, 'Postcode')} icon={<CopyIcon width={15} height={15} />}>Copy postcode</ActionButton>
         <ActionButton onClick={() => onCopy(coords, 'Coordinates')} icon={<CopyIcon width={15} height={15} />}>Copy coords</ActionButton>
         <ActionButton onClick={onShare} icon={<LinkIcon width={15} height={15} />}>Share</ActionButton>
+
       </div>
 
       <Section title="Postal geography">
@@ -200,6 +203,7 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
 
       {places && <Nearby places={places} onShow={onShowPlace} />}
 
+      <CommunityStats data={data} code={districtOf(sel.code)} context/>
       {prices && (
         <UnitPrices sales={local?.sales} sector={sectorPrices} sectorCode={sectorOf(sel.code)} period={prices} covered={priceCovered} />
       )}
@@ -302,7 +306,7 @@ function WhereItIs({ adm, code, kind, method }: { adm: AdminBreakdown; code: str
 
 // -----------------------------------------------------------------------------
 
-function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose }: Props & { sel: { kind: RegionKind; code: string } }) {
+function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose, onCompare }: Props & { sel: { kind: RegionKind; code: string } }) {
   const areaCode = areaOf(sel.code);
   const area = data.areas.get(areaCode);
   const district = sel.kind === 'area' ? undefined : data.districts.get(districtOf(sel.code));
@@ -357,10 +361,11 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
           </div>
         )}
       </div>
-      <div className="flex gap-2 px-4 pb-3.5">
+      <div className="flex flex-wrap gap-2 px-4 pb-3.5">
         <ActionButton primary onClick={onZoom} icon={<ZoomInIcon width={15} height={15} />}>Zoom to {sel.code}</ActionButton>
         <ActionButton onClick={() => onCopy(sel.code, 'Code')} icon={<CopyIcon width={15} height={15} />}>Copy</ActionButton>
         <ActionButton onClick={onShare} icon={<LinkIcon width={15} height={15} />}>Share</ActionButton>
+        {onCompare && <button onClick={()=>onCompare(sel.code,sel.kind as RegionKind)} className="rounded-lg border border-line px-3 text-[12px] text-accent-text">Compare</button>}
       </div>
 
       {sel.kind === 'area' && (
@@ -377,6 +382,7 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         {regionInfo?.im !== undefined && <p className="text-[13px] text-ink">English IMD 2025: mean decile <strong>{regionInfo.im.toFixed(1)}</strong> from {regionInfo.imn?.toLocaleString()} published postcode records. 1 is most deprived, 10 least. This weights postcodes, not residents; border regions show English records only.</p>}
         {regionInfo?.pg !== undefined && <p className="mt-2 text-[13px] text-ink">Sale median change, {data.insights?.growth.baseYear} to {data.insights?.growth.year}: <strong>{regionInfo.pg>0?'+':''}{regionInfo.pg.toFixed(1)}%</strong> ({regionInfo.pgn?.join(' / ')} sales). Different properties sell each year; this is not individual property appreciation.</p>}
       </Section>}
+      <CommunityStats data={data} code={sel.code}/>
       {regionPrices && data.manifest.prices && <RegionPrices pp={regionPrices} period={data.manifest.prices} />}
 
       {sel.kind !== 'area' && (

@@ -224,6 +224,12 @@ export class MapController {
       }
     }
     applyBorders(this.map, this.opts.borders);
+    if(this.opts.borders.flood && !this.map.getSource('ea-flood')) {
+      this.map.addSource('ea-flood',{type:'raster',tiles:['https://environment.data.gov.uk/spatialdata/nafra2-risk-of-flooding-from-rivers-and-sea/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=rofrs_4band&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'],tileSize:256,minzoom:13,maxzoom:19,attribution:'Flood risk © Environment Agency 2025 (OGL) · Rivers and sea, England only'});
+      this.map.addLayer({id:'ea-flood-layer',type:'raster',source:'ea-flood',minzoom:13,paint:{'raster-opacity':0.6}});
+    }
+    if(this.map.getLayer('ea-flood-layer')) this.map.setLayoutProperty('ea-flood-layer','visibility',this.opts.borders.flood?'visible':'none');
+
   }
 
   setPlaces(p: PlaceToggles): void {
@@ -463,6 +469,7 @@ export class MapController {
       if (on.stations) for (const [x, y, name, type] of p.stations) add(x, y, 'stations', type, { name });
       if (on.schools) for (const [x, y, name, phase] of p.schools) add(x, y, 'schools', 'schools', { name, phase });
       if (on.gps) for (const [x, y, name] of p.gps) add(x, y, 'gps', 'gps', { name });
+      for(const kind of ['supermarkets','pharmacies','parks'] as const) if(on[kind]) for(const [x,y,name] of p[kind]??[])add(x,y,kind,kind,{name});
       if (on.stops) for (const [x, y, name] of p.stops) add(x, y, 'stops', 'stops', { name });
     }
     (this.map.getSource(PLACES_SOURCE) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });

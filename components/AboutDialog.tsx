@@ -144,6 +144,19 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
               <p>Price change compares the last two complete calendar years available within the sale extract, with at least 20 sales in each. Changes in the kinds of property sold affect the result; it is not an individual house-price growth estimate.</p>
               <p>Source: MHCLG, English Indices of Deprivation 2025, licensed under the Open Government Licence v3.0. Grey means unavailable or insufficient data. The postcode provenance warning still applies.</p>
             </Block>
+            <Block title="People, homes and broadband">
+              <p>Census 2021 (ONS, England and Wales) supplies population, age, tenure, housing types and overcrowding. LSOA totals are allocated to postal regions by current postcode shares, so these are estimates, not official postcode statistics or current population counts. Scotland is unavailable.</p>
+              <p>© Ofcom, Connected Nations 2025: July 2025 residential coverage shows the mean of matched postcode availability percentages. It is not premises-weighted and does not measure experienced speeds. Dates, sources and definitions appear beside each measure.</p>
+            </Block>
+            <Block title="Recorded crime">
+              <p>Police.uk, September 2025 to August 2026, with the previous twelve months for trends. Anonymised locations are assigned to approximate postal boundaries. Counts exclude antisocial behaviour, which has a separate measure. British Transport Police records are excluded to avoid mixing territorial coverage.</p>
+              <p>Rates use estimated Census 2021 residents. City centres can have high rates because visitors are not counted as residents. These are recorded events, not a personal safety prediction. Regions with missing police-force months, including Greater Manchester and Gloucester in this snapshot, are unavailable; grey does not mean zero crime.</p>
+            </Block>
+            <Block title="Access and the environment">
+              <p>Access measures are median straight-line distances from mapped postcode points to mapped services, in SY, TF, WV and DY. Listings and coverage may be incomplete. Park points are centres, not entrances; distances are not walking times or guarantees of public access, school admission or GP availability.</p>
+              <p>Flood tiles: Environment Agency river and sea risk, England only, © Environment Agency 2025, Open Government Licence. Zoom 13 or closer. Surface water and Wales are not included; an uncoloured area does not prove no risk. Use the official long-term flood-risk service for decisions.</p>
+              <p>OpenStreetMap additions (supermarkets, pharmacies and green spaces): © OpenStreetMap contributors, ODbL 1.0, via Overpass, snapshot 28 October 2026. EPC and planning imports are supported but no values are displayed until suitable exports are supplied.</p>
+            </Block>
             <Block title="Postcode points">
               <p>Each dot is the postcode’s official reference coordinate, not an address. Several postcodes (e.g. PO boxes, large businesses) can share one point.</p>
             </Block>

@@ -7,3 +7,6 @@ next-env.d.ts
 # Raw source downloads (ONSPD etc.) are large; keep them out of git.
 raw/
 .DS_Store
+
+__pycache__/
+*.pyc

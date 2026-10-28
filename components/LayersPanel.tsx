@@ -1,5 +1,6 @@
 'use client';
 
+import {metricFor,metricStops,type MetricDefinition,type DataAvailability} from '@/lib/metrics';
 import type { ReactNode } from 'react';
 import { APP_CONFIG, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
@@ -7,6 +8,8 @@ import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGIO
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
+  metrics?: MetricDefinition[];
+  availability?: DataAvailability[];
   basemap: BasemapId;
   colourMode: ColourMode;
   borders: BorderOptions;
@@ -35,6 +38,9 @@ const COLOUR_MODES: { id: ColourMode; label: string; hint: string }[] = [
 ];
 
 const PLACE_TOGGLES: { key: keyof PlaceToggles; icon: string; label: string }[] = [
+  {key:'supermarkets',icon:'supermarkets',label:'Supermarkets'},
+  {key:'pharmacies',icon:'pharmacies',label:'Pharmacies'},
+  {key:'parks',icon:'parks',label:'Green spaces'},
   { key: 'stations', icon: 'rail', label: 'Stations' },
   { key: 'postboxes', icon: 'postboxes', label: 'Postboxes' },
   { key: 'schools', icon: 'schools', label: 'Schools' },
@@ -52,7 +58,8 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function ColourPreview({ mode }: { mode: ColourMode }) {
-  const colours =
+  const metric=metricFor(mode);
+  const colours = metric ? metricStops(metric,'light').map(([,c])=>c) :
     mode === 'colours' ? REGION_COLOURS.light
     : mode === 'density' ? DENSITY_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
     : mode === 'prices' ? PRICE_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
@@ -97,26 +104,20 @@ export function LayersPanel(p: Props) {
       </Group>
 
       <Group title="Colour regions by">
-        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Colour regions by">
-          {COLOUR_MODES.filter((m) => (m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : m.id === 'deprivation' ? p.available.deprivation : m.id === 'growth' ? p.available.growth : true)).map((m) => {
-            const on = m.id === p.colourMode;
-            return (
-              <button
-                key={m.id}
-                role="radio"
-                aria-checked={on}
-                title={m.hint}
-                onClick={() => p.onColourMode(m.id)}
-                className={`flex flex-col gap-1.5 rounded-lg border p-2 text-left transition-colors ${on ? 'border-accent bg-accent-soft' : 'border-line hover:bg-surface-hover'}`}
-              >
-                <ColourPreview mode={m.id} />
-                <span className={`text-[12.5px] font-medium ${on ? 'text-accent-text' : 'text-ink'}`}>{m.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-[11.5px] leading-snug text-muted">{COLOUR_MODES.find((m) => m.id === p.colourMode)?.hint}.</p>
+        <label className="sr-only" htmlFor="metric-select">Map measure</label>
+        <select id="metric-select" value={p.colourMode} onChange={e=>p.onColourMode(e.target.value as ColourMode)} className="w-full rounded-lg border border-line bg-surface px-3 py-3 text-[13px] text-ink">
+          <optgroup label="Map and existing insights">
+            {COLOUR_MODES.filter(m=>m.id==='prices'?p.available.prices:m.id==='urban'?p.available.urban:m.id==='deprivation'?p.available.deprivation:m.id==='growth'?p.available.growth:true).map(m=><option key={m.id} value={m.id}>{m.id==='density'?'Postcode density':m.label}</option>)}
+          </optgroup>
+          {['People','Safety','Housing','Connectivity','Transport','Services','Environment'].map(topic=><optgroup key={topic} label={topic}>
+            {(p.metrics??[]).filter(m=>m.topic===topic&&m.status==='available').map(m=><option key={m.id} value={`metric:${m.id}`}>{m.title}</option>)}
+          </optgroup>)}
+        </select>
+        <div className="mt-2"><ColourPreview mode={p.colourMode}/></div>
+        <p className="mt-2 text-[11.5px] leading-snug text-muted">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m=>m.id===p.colourMode)?.hint}.</p>
+        {metricFor(p.colourMode) && <p className="mt-2 text-[11px] text-muted">{metricFor(p.colourMode)?.period} · <a className="text-accent-text underline" href={metricFor(p.colourMode)?.source} target="_blank" rel="noreferrer">Data source</a></p>}
       </Group>
+      {!!p.availability?.length && <Group title="Data availability"><details><summary className="cursor-pointer text-[12px] text-muted">Sources awaiting access or coverage</summary><ul className="mt-2 space-y-3">{p.availability.map(d=><li key={d.id} className="text-[11.5px] text-muted"><strong className="block text-ink">{d.title}</strong>{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Source / official service</a></li>)}</ul></details></Group>}
 
       <Group title="Show on the map">
         <div className="flex flex-wrap gap-1.5">
@@ -136,12 +137,13 @@ export function LayersPanel(p: Props) {
             );
           })}
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Zoom in to see them. From OpenStreetMap via Overture Maps; detail areas only.</p>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Zoom in to see them. From Overture Maps and OpenStreetMap via Overpass; detail areas only.</p>
       </Group>
 
-      <Group title="Borders">
+      <Group title="Boundaries and flood overlay">
         <div className="space-y-1">
           {([
+            ['flood', 'River and sea flood risk', 'Environment Agency, England only; zoom 13+'],
             ['countries', 'Country borders', 'England, Wales and Scotland'],
             ['councils', 'Council boundaries', 'Local authorities, with names'],
           ] as const).map(([key, label, hint]) => (
@@ -161,7 +163,7 @@ export function LayersPanel(p: Props) {
             </label>
           ))}
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Postcode areas don’t follow these borders — SY reaches deep into Wales.</p>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Postcode areas do not follow council borders. Flood overlay: river/sea risk in England only, no surface-water layer; absence of colour does not prove no risk.</p>
       </Group>
 
       {p.showDetail && (

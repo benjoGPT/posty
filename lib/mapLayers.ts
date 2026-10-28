@@ -1,3 +1,4 @@
+import {metricFor,metricStops} from './metrics';
 // MapLibre sources, layers and styling for the postcode levels.
 //
 // Each level is visible inside a zoom "window" derived from the current
@@ -11,7 +12,7 @@ import { ZOOM_CONFIG } from './levels';
 
 export type Theme = 'light' | 'dark';
 /** How region fills are coloured. */
-export type ColourMode = 'colours' | 'density' | 'prices' | 'deprivation' | 'growth' | 'urban' | 'outline';
+export type ColourMode = `metric:${string}` | 'colours' | 'density' | 'prices' | 'deprivation' | 'growth' | 'urban' | 'outline';
 export type RegionLevel = Exclude<Level, 'units'>;
 export const REGION_LEVELS: RegionLevel[] = ['areas', 'districts', 'sectors'];
 
@@ -137,6 +138,8 @@ const density: ExpressionSpecification = ['/', ['get', 'n'], ['max', ['coalesce'
 /** Fill colour for a mode. Always a data expression, so switching modes never changes the expression kind. */
 export function fillColour(mode: ColourMode, theme: Theme): ExpressionSpecification {
   const c = PALETTE[theme];
+  const metric=metricFor(mode);
+  if(metric){const prop='mx_'+metric.id;return ['case',['has',prop],['interpolate',['linear'],['get',prop],...metricStops(metric,theme).flat()],NO_DATA[theme]] as unknown as ExpressionSpecification;}
   if (mode === 'colours') {
     const [a, b, d, e] = REGION_COLOURS[theme];
     return ['match', ['get', 'k'], 0, a, 1, b, 2, d, 3, e, c.fill];
@@ -159,7 +162,7 @@ export function fillColour(mode: ColourMode, theme: Theme): ExpressionSpecificat
 
 function fillBase(mode: ColourMode, theme: Theme): ExpressionSpecification {
   if (mode === 'colours') return theme === 'dark' ? ['case', hover, 0.45, 0.3] : ['case', hover, 0.4, 0.24];
-  if (mode === 'density' || mode === 'prices' || mode === 'urban' || mode === 'deprivation' || mode === 'growth') return ['case', hover, 0.8, 0.62];
+  if (mode.startsWith('metric:') || mode === 'density' || mode === 'prices' || mode === 'urban' || mode === 'deprivation' || mode === 'growth') return ['case', hover, 0.8, 0.62];
   return ['case', hover, 0.13, 0.04];
 }
 
@@ -305,10 +308,10 @@ export function applyColourMode(map: MlMap, mode: ColourMode, theme: Theme): voi
   map.setPaintProperty('sectors-tint', 'fill-color', fillColour(mode, theme));
 }
 
-export interface BorderOptions { countries: boolean; councils: boolean }
+export interface BorderOptions { countries: boolean; councils: boolean; flood?: boolean }
 
 /** Nearby-place layers that can be switched on. */
-export type PlaceToggles = { postboxes: boolean; stations: boolean; schools: boolean; gps: boolean; stops: boolean };
+export type PlaceToggles = { postboxes: boolean; stations: boolean; schools: boolean; gps: boolean; stops: boolean; supermarkets: boolean; pharmacies: boolean; parks: boolean };
 export const PLACES_SOURCE = 'pc-places';
 export const PLACE_STYLE: Record<string, { colour: string; label: string }> = {
   postboxes: { colour: '#d0312d', label: 'Postbox' },
@@ -317,6 +320,9 @@ export const PLACE_STYLE: Record<string, { colour: string; label: string }> = {
   bus: { colour: '#2a78d6', label: 'Bus station' },
   stops: { colour: '#2a78d6', label: 'Bus stop' },
   schools: { colour: '#b77400', label: 'School' },
+  supermarkets: {colour:'#008e95',label:'Supermarket'},
+  pharmacies: {colour:'#358525',label:'Pharmacy'},
+  parks: {colour:'#357d55',label:'Mapped green space'},
   gps: { colour: '#008300', label: 'GP surgery' },
 };
 

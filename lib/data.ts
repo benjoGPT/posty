@@ -1,3 +1,4 @@
+import { setMetricDefinitions, type CommunityData } from './metrics';
 // Data-access layer for the static postcode dataset produced by the pipeline.
 // Nothing is loaded up front except a small index; boundary and postcode
 // chunks are fetched on demand (by viewport or search) and cached in memory.
@@ -59,6 +60,9 @@ export interface PlaceSets {
   stops: [number, number, string | null][];
   stations: [number, number, string | null, 'rail' | 'heritage' | 'bus'][];
   schools: [number, number, string, string][]; // name, phase
+  supermarkets: [number, number, string][];
+  pharmacies: [number, number, string][];
+  parks: [number, number, string][];
   gps: [number, number, string][];
 }
 export type PlaceKind = keyof PlaceSets;
@@ -72,6 +76,7 @@ const UNIT_CACHE_LIMIT = 250;
 export class PostcodeData {
   manifest!: Manifest;
   insights: Insights | null = null;
+  community: CommunityData | null = null;
   areas = new Map<string, AreaInfo>();
   districts = new Map<string, DistrictInfo>();
   districtsByArea = new Map<string, DistrictInfo[]>();
@@ -88,13 +93,19 @@ export class PostcodeData {
   }
 
   async init(): Promise<void> {
-    const [manifest, index, areas, insights] = await Promise.all([
+    const [manifest, index, areas, insights, community] = await Promise.all([
       this.fetchJson<Manifest>('manifest.json'),
       this.fetchJson<{ areas: AreaInfo[]; districts: DistrictInfo[] }>('index.json'),
       this.fetchJson<RegionCollection>('areas.geojson'),
       this.fetchJson<Insights>('insights.json').catch(() => null),
+      this.fetchJson<CommunityData>('community.json').catch(() => null),
     ]);
     this.insights = insights;
+    this.community = community;
+    setMetricDefinitions(community?.metrics ?? []);
+    const enrich = (p: {c:string}) => { const values=community?.regions[p.c]; if(values)Object.assign(p,Object.fromEntries(Object.entries(values).filter(([,v])=>Number.isFinite(v)).map(([k,v])=>['mx_'+k,v]))); };
+    for(const g of [...index.areas,...index.districts])enrich(g);
+    for(const f of areas.features)enrich(f.properties);
     for (const g of [...index.areas, ...index.districts]) Object.assign(g, insights?.groups[g.c] ?? {});
     for (const f of areas.features) Object.assign(f.properties, insights?.groups[f.properties.c] ?? {});
     this.manifest = manifest;
@@ -120,6 +131,10 @@ export class PostcodeData {
             if (value.areas) value.areas.forEach(attach);
             if (value.districts) value.districts.forEach(attach);
           }
+          if (this.community && value.features) for(const f of value.features) {
+            const values=this.community.regions[f.properties?.c];
+            if(values)Object.assign(f.properties,Object.fromEntries(Object.entries(values).filter(([,v])=>Number.isFinite(v)).map(([k,v])=>['mx_'+k,v])));
+          }
           return value;
         });
       });
@@ -141,7 +156,12 @@ export class PostcodeData {
   /** Sector boundaries exist only for detail areas; resolves null elsewhere. */
   async loadSectors(area: string): Promise<RegionCollection | null> {
     if (!this.isDetailArea(area)) return null;
-    return this.fetchJson<RegionCollection>(`sectors/${area}.geojson`);
+    const [fc, values] = await Promise.all([
+      this.fetchJson<RegionCollection>(`sectors/${area}.geojson`),
+      this.community ? this.fetchJson<Record<string,Record<string,number>>>(`community/sectors/${area}.json`).catch(()=>null) : Promise.resolve(null),
+    ]);
+    if(values&&this.community){Object.assign(this.community.regions,values);for(const f of fc.features){const v=values[f.properties.c];if(v)Object.assign(f.properties,Object.fromEntries(Object.entries(v).filter(([,n])=>Number.isFinite(n)).map(([k,n])=>['mx_'+k,n])));}}
+    return fc;
   }
 
   /** Postcode unit points for a district (detail areas only). */
@@ -216,6 +236,9 @@ export class PostcodeData {
       stops: near(all('stops'), 'stops', (r) => ({ name: r[2] }), 1),
       stations: near(all('stations'), 'stations', (r) => ({ name: r[2], info: r[3] }), 3),
       schools: near(all('schools'), 'schools', (r) => ({ name: r[2], info: r[3] }), 3),
+      supermarkets: near(all('supermarkets'), 'supermarkets', (r) => ({name:r[2]}), 3),
+      pharmacies: near(all('pharmacies'), 'pharmacies', (r) => ({name:r[2]}), 3),
+      parks: near(all('parks'), 'parks', (r) => ({name:r[2],info:'Mapped centre, not an entrance'}), 3),
       gps: near(all('gps'), 'gps', (r) => ({ name: r[2] }), 2),
     };
   }

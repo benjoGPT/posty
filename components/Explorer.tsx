@@ -10,6 +10,7 @@ import type { BorderOptions, ColourMode, PlaceToggles, Theme } from '@/lib/mapLa
 import { areaOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
 import { readUrlState, writeUrlState } from '@/lib/url';
+import {CompareAreas,type ComparedArea} from './CompareAreas';
 import { AboutDialog } from './AboutDialog';
 import { DetailsContent } from './DetailsPanel';
 import { AlertIcon, CheckIcon, CloseIcon } from './Icons';
@@ -37,7 +38,7 @@ const DEFAULT_PREFS: Prefs = {
   basemap: 'light',
   colourMode: 'colours',
   borders: { countries: true, councils: false },
-  places: { stations: true, postboxes: false, schools: false, gps: false, stops: false },
+  places: { stations: true, postboxes: false, schools: false, gps: false, stops: false, supermarkets: false, pharmacies: false, parks: false },
   recent: [],
 };
 
@@ -100,6 +101,8 @@ export default function Explorer() {
   const [stack, setStack] = useState<StackedUnit[] | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+  const [compared,setCompared]=useState<ComparedArea[]>([]);
+  const [compareOpen,setCompareOpen]=useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [retry, setRetry] = useState(0);
   const isMobile = useIsMobile();
@@ -360,6 +363,11 @@ export default function Explorer() {
       onCopy={(t, w) => void copy(t, w)}
       onShare={() => void copy(window.location.href, 'Link')}
       onClose={() => select(null)}
+      onCompare={(code,kind)=>{
+        if(compared.some(a=>a.code===code)){setCompareOpen(true);return;}
+        if(compared.length&&compared[0].kind!==kind){showToast(`Choose another ${compared[0].kind} to compare like for like.`,'error');return;}
+        const next=[...compared,{code,kind}].slice(-2);setCompared(next);if(next.length===2)setCompareOpen(true);else showToast(`${code} added. Select another ${kind} and choose Compare.`);
+      }}
       onShowPlace={(pl) => {
         // Make sure that kind of place is visible, then go there.
         const key = pl.kind;
@@ -376,6 +384,7 @@ export default function Explorer() {
       onBorders={changeBorders}
       places={prefs.places}
       onPlaces={changePlaces}
+      metrics={data?.community?.metrics} availability={data?.community?.availability}
       available={{ prices: !!data?.manifest.prices, urban: !!data?.manifest.extras?.urbanRural, deprivation: !!data?.insights, growth: !!data?.insights && Object.values(data.insights.groups).some(g=>g.pg!==undefined) }}
       mode={mode}
       showDetail={isMobile}
@@ -391,6 +400,8 @@ export default function Explorer() {
 
   return (
     <main className="fixed inset-0 overflow-hidden">
+      {data&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}}/>}
+      {!!compared.length&&<button onClick={()=>setCompareOpen(true)} className="absolute left-3 bottom-[140px] z-30 rounded-xl border border-line bg-surface px-3 py-2 text-[12px] text-ink shadow-float">Compare ({compared.length}/2)</button>}
       {/* MapLibre styles its container as position: relative, so it gets its own full-size element. */}
       <div className="absolute inset-0">
         <div ref={mapEl} className="h-full w-full" role="application" aria-label="Postcode map. Use arrow keys to pan and plus or minus to zoom." />
