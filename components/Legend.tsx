@@ -68,7 +68,7 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
           <span>Colours only keep neighbouring regions apart; they don’t mean anything else.</span>
         </div>
       )}
-      {metricFor(colourMode) && <p className="mt-2 text-faint">{metricFor(colourMode)?.note}</p>}
+      {metricFor(colourMode) && <details className="mt-2 text-faint"><summary className="cursor-pointer">Measure definition and limits</summary><p className="mt-1">{metricFor(colourMode)?.note}</p></details>}
       {colourMode === 'deprivation' && <p className="mt-2 text-faint">English IMD 2025, postcode-weighted mean LSOA decile. Not a population-weighted score. Mixed-border regions show English records only. Grey means unavailable.</p>}
       {colourMode === 'growth' && <p className="mt-2 text-faint">Two complete calendar years, minimum 20 sales each. Different properties sell each year; this is not individual property appreciation. Grey means insufficient data.</p>}
       {colourMode === 'prices' && (
@@ -77,7 +77,7 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
         </p>
       )}
 
-      {borders.flood && <p className="mt-2 text-warn">EA river/sea flood bands, England only, zoom 13+. High ≥3.3%, medium 1–3.3%, low 0.1–1%, very low &lt;0.1% annual chance. No surface-water data here. <a className="underline" href="https://www.gov.uk/check-long-term-flood-risk" target="_blank" rel="noreferrer">Official risk check</a></p>}
+      {borders.flood && <div className="mt-2"><img className="rounded bg-white p-1" width={99} height={108} src="https://environment.data.gov.uk/spatialdata/nafra2-risk-of-flooding-from-rivers-and-sea/wms?SERVICE=WMS&amp;VERSION=1.3.0&amp;REQUEST=GetLegendGraphic&amp;LAYER=rofrs_4band&amp;FORMAT=image/png" alt="Flood bands: dark purple high, purple medium, blue low, pale blue very low, grey unavailable"/><p className="mt-2 text-warn">EA river/sea flood bands, England only, zoom 13+. High ≥3.3%, medium 1–3.3%, low 0.1–1%, very low &lt;0.1% annual chance. No surface-water data here. <a className="underline" href="https://www.gov.uk/check-long-term-flood-risk" target="_blank" rel="noreferrer">Official risk check</a></p></div>}
       {(borders.countries || borders.councils) && (
         <ul className="mt-2.5 space-y-1 border-t border-line pt-2 text-muted">
           {borders.countries && (

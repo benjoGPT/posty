@@ -449,7 +449,7 @@ export default function Explorer() {
         )}
 
         {layersOpen && !isMobile && (
-          <div className={`animate-in pointer-events-auto absolute bottom-8 w-[340px] overflow-hidden rounded-2xl border border-line bg-surface shadow-float ${selection && panel ? 'right-[448px]' : 'right-[64px]'}`}>
+          <div className={`animate-in pointer-events-auto absolute bottom-8 max-h-[calc(100dvh-48px)] w-[340px] overflow-y-auto rounded-2xl border border-line bg-surface shadow-float ${selection && panel ? 'right-[448px]' : 'right-[64px]'}`}>
             {layers}
           </div>
         )}
@@ -470,7 +470,7 @@ export default function Explorer() {
           </div>
         )}
 
-        {!quizOpen && !(isMobile && (panel || layersOpen)) && (
+        {!quizOpen && !layersOpen && !(isMobile && panel) && (
           <div className={`absolute ${isMobile ? 'top-[124px] right-3' : `top-3 ${selection && panel ? 'right-[392px]' : 'right-3'}`}`}>
             <ColourKey colourMode={prefs.colourMode} theme={theme} priceScale={data?.manifest.prices?.stops} growthPeriod={data?.insights?.growth} />
           </div>

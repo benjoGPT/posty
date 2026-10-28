@@ -79,7 +79,7 @@ function ColourPreview({ mode }: { mode: ColourMode }) {
 export function LayersPanel(p: Props) {
   return (
     <div className="text-ink">
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-4 py-2.5">
         <h2 className="text-[14px] font-semibold">Map options</h2>
         <button onClick={p.onClose} aria-label="Close map options" className="grid size-11 md:size-8 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
           <CloseIcon />
@@ -114,7 +114,7 @@ export function LayersPanel(p: Props) {
           </optgroup>)}
         </select>
         <div className="mt-2"><ColourPreview mode={p.colourMode}/></div>
-        <p className="mt-2 text-[11.5px] leading-snug text-muted">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m=>m.id===p.colourMode)?.hint}.</p>
+        <details className="mt-2 text-[11.5px] leading-snug text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-1">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m=>m.id===p.colourMode)?.hint}</p></details>
         {metricFor(p.colourMode) && <p className="mt-2 text-[11px] text-muted">{metricFor(p.colourMode)?.period} · <a className="text-accent-text underline" href={metricFor(p.colourMode)?.source} target="_blank" rel="noreferrer">Data source</a></p>}
       </Group>
       {!!p.availability?.length && <Group title="Data availability"><details><summary className="cursor-pointer text-[12px] text-muted">Sources awaiting access or coverage</summary><ul className="mt-2 space-y-3">{p.availability.map(d=><li key={d.id} className="text-[11.5px] text-muted"><strong className="block text-ink">{d.title}</strong>{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Source / official service</a></li>)}</ul></details></Group>}
