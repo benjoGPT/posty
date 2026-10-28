@@ -467,7 +467,9 @@ export default function Explorer() {
 
         {!quizOpen && !mobileBusy && (
           <p className="pointer-events-none absolute bottom-[max(6px,env(safe-area-inset-bottom))] left-4 text-[10.5px] font-medium text-muted md:bottom-2.5 [text-shadow:0_0_3px_var(--surface),0_0_6px_var(--surface)]">
-            Built by Benjo
+            <a href="https://benjobuilds.com" target="_blank" rel="noopener" className="pointer-events-auto hover:text-ink hover:underline underline-offset-2">
+              Built by Benjo <span className="text-faint">@benjobuilds</span>
+            </a>
           </p>
         )}
 
