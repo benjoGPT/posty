@@ -11,6 +11,7 @@ import {
   applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, setPriceScale, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
   PLACE_STYLE, PLACES_SOURCE, type BorderOptions, type ColourMode, type PlaceToggles, type RegionLevel, type Theme,
 } from './mapLayers';
+import {crimeLabel,monthLabel,type CrimeRecord} from './crime';
 import type { NamedTarget } from './namedSearch';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
@@ -93,6 +94,8 @@ export class MapController {
   private hovered: { source: string; id: string } | null = null;
   private selection: Selection | null = null;
   private marker: maplibregl.Marker | null = null;
+  private crimeMarker: maplibregl.Marker | null = null;
+  private crimeRecords: CrimeRecord[] = [];
   private searchMarker: maplibregl.Marker | null = null;
   private meMarker: maplibregl.Marker | null = null;
   private renderQueued = false;
@@ -180,6 +183,7 @@ export class MapController {
     this.marker?.remove();
     this.meMarker?.remove();
     this.searchMarker?.remove();
+    this.crimeMarker?.remove();
     this.map.remove();
   }
 
@@ -204,6 +208,7 @@ export class MapController {
     this.applyWindows();
     this.render();
     this.applySelection();
+    this.renderCrimes();
     void this.refresh();
   }
 
@@ -230,6 +235,32 @@ export class MapController {
     this.searchMarker = new maplibregl.Marker({color:'#2563eb'}).setLngLat([target.lng,target.lat]).setPopup(new maplibregl.Popup({offset:25}).setDOMContent(label)).addTo(this.map);
     this.map.flyTo({center:[target.lng,target.lat],zoom:target.kind==='street'?15:12,padding,duration:reducedMotion()?0:700});
     this.searchMarker.togglePopup();
+  }
+
+  setCrimeRecords(records: CrimeRecord[]): void {
+    this.crimeRecords = records;
+    if(!records.length){this.crimeMarker?.remove();this.crimeMarker=null;}
+    this.renderCrimes();
+  }
+
+  private renderCrimes(): void {
+    if(!this.map.getLayer('units-circle')||(!this.crimeRecords.length&&!this.map.getSource('crime-records')))return;
+    const collection = {type:'FeatureCollection' as const,features:this.crimeRecords.map(r=>({type:'Feature' as const,geometry:{type:'Point' as const,coordinates:[Number(r.location.longitude),Number(r.location.latitude)]},properties:{id:r.id}}))};
+    const source=this.map.getSource('crime-records') as GeoJSONSource|undefined;
+    if(source){source.setData(collection);return;}
+    this.map.addSource('crime-records',{type:'geojson',data:collection,cluster:true,clusterRadius:38,clusterMaxZoom:16,attribution:'Crime records: Police.uk (OGL v3.0), anonymised locations'});
+    this.map.addLayer({id:'crime-clusters',type:'circle',source:'crime-records',filter:['has','point_count'],paint:{'circle-radius':17,'circle-color':'#b45309','circle-stroke-color':'#ffffff','circle-stroke-width':2}});
+    this.map.addLayer({id:'crime-cluster-count',type:'symbol',source:'crime-records',filter:['has','point_count'],layout:{'text-field':['get','point_count_abbreviated'],'text-font':['Noto Sans Regular'],'text-size':12,'text-allow-overlap':true},paint:{'text-color':'#ffffff'}});
+    this.map.addLayer({id:'crime-points',type:'circle',source:'crime-records',filter:['!', ['has','point_count']],paint:{'circle-radius':7,'circle-color':'#b45309','circle-stroke-color':'#ffffff','circle-stroke-width':2}});
+  }
+
+  focusCrime(record: CrimeRecord): void {
+    this.crimeMarker?.remove();
+    const label=document.createElement('div');
+    for(const text of [crimeLabel(record.category),monthLabel(record.month),record.location.street.name,record.outcome_status?.category??'No outcome published','Approximate location. Exact day and time not published.']){const p=document.createElement('p');p.textContent=text;label.append(p);}
+    this.crimeMarker=new maplibregl.Marker({color:'#b45309'}).setLngLat([Number(record.location.longitude),Number(record.location.latitude)]).setPopup(new maplibregl.Popup({offset:25}).setDOMContent(label)).addTo(this.map);
+    this.map.flyTo({center:[Number(record.location.longitude),Number(record.location.latitude)],zoom:16,padding:{top:120,left:40,right:40,bottom:100},duration:reducedMotion()?0:650});
+    this.crimeMarker.togglePopup();
   }
 
   setColourMode(mode: ColourMode): void {
@@ -554,6 +585,15 @@ export class MapController {
   }
 
   private onClick(e: MapMouseEvent): void {
+    if(this.map.getLayer('crime-points')){
+      const hits=this.map.queryRenderedFeatures(e.point,{layers:['crime-points','crime-clusters']});
+      const hit=hits[0];
+      if(hit){
+        if(hit.properties.cluster){const source=this.map.getSource('crime-records') as GeoJSONSource;void source.getClusterExpansionZoom(hit.properties.cluster_id).then(zoom=>{if(!this.destroyed)this.map.easeTo({center:(hit.geometry as Point).coordinates as [number,number],zoom,duration:this.duration(400)});}).catch(()=>{});}
+        else{const record=this.crimeRecords.find(r=>r.id===Number(hit.properties.id));if(record)this.focusCrime(record);}
+        return;
+      }
+    }
     if (this.placeAt(e)) return;
     const r = coarsePointer() ? 16 : 9;
     const units = this.unitsAt(e.point.x, e.point.y, r);

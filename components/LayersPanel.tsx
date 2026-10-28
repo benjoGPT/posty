@@ -8,6 +8,8 @@ import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGIO
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
+  crime?: ReactNode;
+  crimeRequest?: number;
   metrics?: MetricDefinition[];
   availability?: DataAvailability[];
   basemap: BasemapId;
@@ -76,12 +78,12 @@ function ColourPreview({ mode, theme = 'light' }: { mode: ColourMode; theme?: 'l
   );
 }
 
-type PanelTab = 'data' | 'places' | 'settings';
+type PanelTab = 'data' | 'places' | 'crime' | 'settings';
 interface LayerChoice { id: ColourMode; title: string; topic: string; hint: string; search: string }
 const TOPICS = ['Popular', 'All', 'Map appearance', 'People', 'Crime', 'Housing', 'Broadband', 'Transport', 'Services', 'Environment'];
 const POPULAR = ['colours', 'prices', 'deprivation', 'metric:population_density', 'metric:crime_rate', 'metric:gigabit'];
 const SHORT_NAMES: Record<string, string> = { population: 'Population', population_density: 'Population density', mean_age: 'Average age (estimate)', children: 'Children under 15', older: 'Residents aged 65+', crime_rate: 'Crime rate', crime_count: 'Recorded crimes', crime_change: 'Crime trend', gigabit: 'Gigabit broadband', superfast: 'Superfast broadband' };
-const TABS: { id: PanelTab; label: string }[] = [{ id: 'data', label: 'Data layers' }, { id: 'places', label: 'Places' }, { id: 'settings', label: 'Map settings' }];
+const TABS: { id: PanelTab; label: string }[] = [{ id: 'data', label: 'Data layers' }, { id: 'places', label: 'Places' }, { id: 'crime', label: 'Crime' }, { id: 'settings', label: 'Map settings' }];
 const SEARCH_ALIASES: Record<string, string> = { station_distance: 'train railway station', green_distance: 'park parks green space outdoors', gp_distance: 'doctor medical health GP surgery', supermarket_distance: 'shops grocery shopping', pharmacy_distance: 'chemist pharmacy', school_distance: 'school education' };
 const topicOf = (topic: string) => topic === 'Safety' ? 'Crime' : topic === 'Connectivity' ? 'Broadband' : topic;
 
@@ -89,6 +91,7 @@ export function LayersPanel(p: Props) {
   const prefix = useId();
   const [tab, setTab] = useState<PanelTab>('data');
   const [topic, setTopic] = useState('Popular');
+  useEffect(() => { if(p.crimeRequest)setTab('crime'); },[p.crimeRequest]);
   const [query, setQuery] = useState('');
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => { if (content.current) content.current.scrollTop = 0; }, [tab, topic, query]);
@@ -128,7 +131,7 @@ export function LayersPanel(p: Props) {
           <div><h2 className="text-[16px] font-semibold">Map options</h2><p className="mt-0.5 text-[12px] text-muted">Choose what the map shows.</p></div>
           <button type="button" onClick={p.onClose} aria-label="Close map options" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-hover"><CloseIcon /></button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-1" role="tablist" aria-label="Map option sections" onKeyDown={e => {
+        <div className="mt-3 grid grid-cols-4 gap-1" role="tablist" aria-label="Map option sections" onKeyDown={e => {
           const index = TABS.findIndex(t => t.id === tab);
           const next = e.key === 'ArrowRight' ? (index + 1) % TABS.length : e.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : -1;
           if (next < 0) return; e.preventDefault(); setTab(TABS[next].id); remember(TABS[next].id, topic); (e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]).focus();
@@ -144,10 +147,13 @@ export function LayersPanel(p: Props) {
             <div className="relative"><input id={`${prefix}-search`} type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search data layers…" className="h-11 w-full rounded-lg border border-line bg-surface-2 px-3 pr-16 text-[13px] outline-none focus:border-accent focus:ring-1 focus:ring-accent" />{query && <button type="button" onClick={() => setQuery('')} className="absolute top-0 right-1 h-11 px-2 text-[12px] text-accent-text">Clear</button>}</div>
             <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Layer topics">{TOPICS.filter(t => t === 'Popular' || t === 'All' || choices.some(m => m.topic === t)).map(t => <button key={t} type="button" aria-pressed={!search && topic === t} onClick={() => { setTopic(t); setQuery(''); remember(tab, t); }} className={`min-h-8 rounded-md border px-2.5 py-1 text-[11.5px] font-medium ${!search && topic === t ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-muted hover:bg-surface-hover hover:text-ink'}`}>{t}</button>)}</div>
           </div>
+          {topic === 'Crime' && !search && <div className="px-4 pt-3"><button type="button" onClick={()=>{setTab('crime');remember('crime',topic);}} className="min-h-11 w-full rounded-lg border border-accent bg-accent-soft px-3 text-left text-[12px] font-semibold text-accent-text">Browse individual crime records →</button><p className="mt-2 text-[11px] leading-relaxed text-muted">Grey areas can have missing force data. Open Crime to check coverage and browse published records by month.</p></div>}
           <p role="status" className="px-4 pt-3 text-[11px] text-muted">{matches.length} {matches.length === 1 ? 'layer' : 'layers'}{search ? ` matching “${query.trim()}”` : ''} · choose one to colour the map</p>
           {groups.map(group => <Group key={group} title={group}>{layerRows(group === 'Popular layers' ? matches : matches.filter(m => m.topic === group))}</Group>)}
           {!matches.length && <div className="px-4 py-8 text-[13px] text-muted"><p>No layers found. Try crime, population or broadband.</p><button type="button" onClick={() => { setQuery(''); setTopic('All'); remember(tab, 'All'); }} className="mt-3 rounded-lg border border-line px-3 py-2 text-accent-text">Show all layers</button></div>}
         </>}
+
+        {tab === 'crime' && p.crime}
 
         {tab === 'places' && <>
           <p className="px-4 pt-4 text-[12px] leading-relaxed text-muted">Show nearby places in SY, TF, WV and DY. Zoom in to see markers. These toggles can be combined.</p>
@@ -166,13 +172,13 @@ export function LayersPanel(p: Props) {
         </>}
       </div>
 
-      <footer className="max-h-[38%] shrink-0 overflow-y-auto border-t border-line bg-surface-2 px-4 py-3">
+      {tab !== 'crime' && <footer className="max-h-[38%] shrink-0 overflow-y-auto border-t border-line bg-surface-2 px-4 py-3">
         <p className="text-[10px] font-semibold tracking-wider text-faint uppercase">Active colour layer</p>
         <h3 className="mt-1 text-[13px] font-semibold">{title}</h3>
         <div className="mt-2"><ColourPreview mode={p.colourMode} theme={theme} /></div>
         <p className="mt-2 text-[11px] text-muted">{active ? `${active.period} · ${active.unit}` : 'One colour layer at a time. Place markers can be combined.'}</p>
         <details className="mt-2 text-[11px] leading-relaxed text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-2">{active?.note ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.hint}{active && <> <a href={active.source} target="_blank" rel="noreferrer" className="text-accent-text underline">Source</a></>}</p></details>
-      </footer>
+      </footer>}
     </div>
   );
 }

@@ -29,3 +29,5 @@ data['crime']['maskedRegions']=masked;data['crime']['maskedTrends']=trendmasked;
 for m in data['metrics']:
  if m['topic']=='Safety':m['note']+=' Regions with territorial-force gaps are masked. British Transport Police records are excluded for period consistency.'
 (DATA/'community.json').write_text(json.dumps(data,separators=(',',':')));print('Crime coverage masked',len(masked),'regions; trend gaps',len(trendmasked))
+# Loaded only when a visitor opens crime coverage or the record explorer.
+(DATA/'crime-coverage.json').write_text(json.dumps({'months':months,'forcesByMonth':files,'regions':force_by_region,'source':'https://data.police.uk/changelog/','generated':data['generated'],'rule':data['crime']['coverageRule']},separators=(',',':')))

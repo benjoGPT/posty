@@ -1,5 +1,9 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+const CrimeExplorer=dynamic(()=>import('./CrimeExplorer').then(m=>m.CrimeExplorer));
+import type {CrimeRecord} from '@/lib/crime';
+import type {NamedTarget} from '@/lib/namedSearch';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { APP_CONFIG, basemapById, type BasemapId, type Bounds } from '@/config/app';
 import { PostcodeData } from '@/lib/data';
@@ -95,6 +99,8 @@ export default function Explorer() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const theme = basemapById(prefs.basemap).theme as Theme;
   const [layersOpen, setLayersOpen] = useState(false);
+  const [named,setNamed]=useState<NamedTarget|null>(null);
+  const [crimeRequest,setCrimeRequest]=useState(0);
   const [quizOpen, setQuizOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [mode, setMode] = useState<DetailMode>('auto');
@@ -137,6 +143,7 @@ export default function Explorer() {
 
   const select = useCallback((sel: Selection | null, opts: { fly?: boolean; keepStack?: boolean } = {}) => {
     setSelection(sel);
+    setNamed(null);
     if (!opts.keepStack) setStack(null);
     ctrl.current?.setSelection(sel);
     if (sel && opts.fly) void ctrl.current?.focus(sel, padding(true));
@@ -148,6 +155,7 @@ export default function Explorer() {
     if (target.kind === 'place' || target.kind === 'street') {
       if (!Number.isFinite(target.lng) || !Number.isFinite(target.lat) || target.lat < 49 || target.lat > 61 || target.lng < -9 || target.lng > 3) return {ok:false,message:'This search result has no usable GB location.'};
       select(null);
+      setNamed(target);
       ctrl.current.focusNamed(target, padding(false));
       return {ok:true};
     }
@@ -349,6 +357,11 @@ export default function Explorer() {
     showToast(ok ? `${what} copied: ${text}` : 'Couldn’t copy to the clipboard', ok ? 'ok' : 'error');
   };
 
+  const getCrimeCentre=useCallback(():[number,number]=>{const c=ctrl.current?.map.getCenter();return c?[c.lng,c.lat]:[-2.75,52.707];},[]);
+  const showCrimeRecords=useCallback((records:CrimeRecord[])=>{ctrl.current?.setCrimeRecords(records);},[]);
+  const locateCrime=useCallback((record:CrimeRecord)=>{ctrl.current?.focusCrime(record);},[]);
+  const openCrime=()=>{setCrimeRequest(n=>n+1);setLayersOpen(true);};
+
   if (fatal) {
     return (
       <main className="grid h-dvh place-items-center bg-surface-2 p-6">
@@ -369,6 +382,7 @@ export default function Explorer() {
   const panel = data && selection && !quizOpen && (
     <DetailsContent
       data={data}
+      onCrime={openCrime}
       selection={selection}
       stack={stack}
       onNavigate={(t) => void navigate(t).then((r) => { if (!r.ok) showToast(r.message, 'error'); })}
@@ -392,6 +406,8 @@ export default function Explorer() {
   );
   const layers = (
     <LayersPanel
+      crimeRequest={crimeRequest}
+      crime={data?<CrimeExplorer data={data} selection={selection} named={named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={locateCrime}/>:<p className="p-4 text-[12px] text-muted">The map is loading…</p>}
       basemap={prefs.basemap}
       colourMode={prefs.colourMode}
       borders={prefs.borders}

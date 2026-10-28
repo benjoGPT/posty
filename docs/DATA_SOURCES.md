@@ -221,3 +221,9 @@ Street/place search uses [OS Open Names](https://www.ordnancesurvey.co.uk/produc
 Named records are self-hosted in128 gzip buckets, fetched only during named search; no query is sent to an external geocoder. Other postcode searches can still use postcodes.io as documented. The search archive does not load at startup.
 
 Regional stats and optional district details load by postcode area. Production assets are copied into content-addressed releases; those URLs receive immutable caching, while source paths remain revalidated. Source dates remain visible in the metric definitions. Weekly lightweight publisher checks report availability/checksum changes for review, rather than automatically presenting unchecked newer data.
+
+### Individual crime records
+
+The Crime tab queries the public [Police.uk API](https://data.police.uk/docs/method/crime-street/) on demand for a chosen published month and displayed search area. Returned category, month, anonymised street/coordinates, optional context and latest outcome are shown. API IDs are not police incident references. Exact day/time and real addresses are deliberately not published: see the [anonymisation table](https://data.police.uk/about/#privacy-and-anonymisation). The feed is monthly, incomplete for some forces and not a live incident feed. Scotland has no territorial-force coverage. BTP is labelled in records and excluded from existing annual comparisons.
+
+Bounded postcode regions use bounding-box API retrieval then polygon filtering (holes and multipart shapes supported). Large regions, postcode reference points and named results use an explicitly labelled one-mile radius. API errors/limits remain errors. No-result responses do not prove no crime. `crime-coverage.json` contains lazy force/month coverage audit metadata, generated from current ONSPD memberships and archive filenames. It is separate from the live API response and does not guarantee completeness of individual records.

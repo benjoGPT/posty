@@ -23,6 +23,7 @@ interface Props {
   onShare: () => void;
   onClose: () => void;
   onShowPlace: (p: NearbyPlace) => void;
+  onCrime?:()=>void;
   onCompare?: (code:string,kind:RegionKind)=>void;
 }
 
@@ -127,7 +128,7 @@ function SourceFooter({ data, extra }: { data: PostcodeData; extra?: string }) {
 
 // -----------------------------------------------------------------------------
 
-function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onShare, onClose, onShowPlace }: Props & { sel: Extract<Selection, { kind: 'unit' }> }) {
+function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onShare, onClose, onShowPlace, onCrime }: Props & { sel: Extract<Selection, { kind: 'unit' }> }) {
   const lookup = useAsync<LookupResult>(() => lookupPostcode(sel.code), [sel.code]);
   const area = data.areas.get(areaOf(sel.code));
   const coords = `${sel.lat.toFixed(6)}, ${sel.lng.toFixed(6)}`;
@@ -203,7 +204,8 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
 
       {places && <Nearby places={places} onShow={onShowPlace} />}
 
-      <CommunityStats data={data} code={districtOf(sel.code)} context/>
+      {onCrime&&<div className="border-t border-line px-4 py-3"><button type="button" onClick={onCrime} className="min-h-10 w-full rounded-lg border border-accent bg-accent-soft px-3 text-left text-[12px] font-semibold text-accent-text">Explore published crime records →</button></div>}
+      <CommunityStats data={data} code={districtOf(sel.code)} context onCrime={onCrime}/>
       {prices && (
         <UnitPrices sales={local?.sales} sector={sectorPrices} sectorCode={sectorOf(sel.code)} period={prices} covered={priceCovered} />
       )}
@@ -306,7 +308,7 @@ function WhereItIs({ adm, code, kind, method }: { adm: AdminBreakdown; code: str
 
 // -----------------------------------------------------------------------------
 
-function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose, onCompare }: Props & { sel: { kind: RegionKind; code: string } }) {
+function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose, onCompare, onCrime }: Props & { sel: { kind: RegionKind; code: string } }) {
   const areaCode = areaOf(sel.code);
   const area = data.areas.get(areaCode);
   const district = sel.kind === 'area' ? undefined : data.districts.get(districtOf(sel.code));
@@ -382,7 +384,8 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         {regionInfo?.im !== undefined && <p className="text-[13px] text-ink">English IMD 2025: mean decile <strong>{regionInfo.im.toFixed(1)}</strong> from {regionInfo.imn?.toLocaleString()} published postcode records. 1 is most deprived, 10 least. This weights postcodes, not residents; border regions show English records only.</p>}
         {regionInfo?.pg !== undefined && <p className="mt-2 text-[13px] text-ink">Sale median change, {data.insights?.growth.baseYear} to {data.insights?.growth.year}: <strong>{regionInfo.pg>0?'+':''}{regionInfo.pg.toFixed(1)}%</strong> ({regionInfo.pgn?.join(' / ')} sales). Different properties sell each year; this is not individual property appreciation.</p>}
       </Section>}
-      <CommunityStats data={data} code={sel.code}/>
+      {onCrime&&<div className="border-t border-line px-4 py-3"><button type="button" onClick={onCrime} className="min-h-10 w-full rounded-lg border border-accent bg-accent-soft px-3 text-left text-[12px] font-semibold text-accent-text">Explore published crime records →</button></div>}
+      <CommunityStats data={data} code={sel.code} onCrime={onCrime}/>
       {regionPrices && data.manifest.prices && <RegionPrices pp={regionPrices} period={data.manifest.prices} />}
 
       {sel.kind !== 'area' && (
