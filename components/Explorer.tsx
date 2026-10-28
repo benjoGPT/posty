@@ -14,6 +14,7 @@ import { AboutDialog } from './AboutDialog';
 import { DetailsContent } from './DetailsPanel';
 import { AlertIcon, CheckIcon, CloseIcon } from './Icons';
 import { LayersPanel } from './LayersPanel';
+import { ColourKey } from './ColourKey';
 import { Legend } from './Legend';
 import { LevelBar } from './LevelBar';
 import { MapControls } from './MapControls';
@@ -443,7 +444,7 @@ export default function Explorer() {
         )}
 
         {!mobileBusy && !quizOpen && (
-          <div className="absolute bottom-10 left-3 md:bottom-8">
+          <div className="absolute bottom-11 left-3 md:bottom-9">
             <Legend
               key={String(isMobile)}
               level={level}
@@ -453,10 +454,21 @@ export default function Explorer() {
               theme={theme}
               defaultOpen={!isMobile}
               unofficialData={!!data && !data.manifest.source.verified}
-              priceScale={data?.manifest.prices?.stops}
               onAbout={() => setAboutOpen(true)}
             />
           </div>
+        )}
+
+        {!quizOpen && !(isMobile && (panel || layersOpen)) && (
+          <div className={`absolute ${isMobile ? 'top-[124px] right-3' : `top-3 ${selection && panel ? 'right-[392px]' : 'right-3'}`}`}>
+            <ColourKey colourMode={prefs.colourMode} theme={theme} priceScale={data?.manifest.prices?.stops} />
+          </div>
+        )}
+
+        {!quizOpen && !mobileBusy && (
+          <p className="pointer-events-none absolute bottom-[max(6px,env(safe-area-inset-bottom))] left-4 text-[10.5px] font-medium text-muted md:bottom-2.5 [text-shadow:0_0_3px_var(--surface),0_0_6px_var(--surface)]">
+            Built by Benjo
+          </p>
         )}
 
         {view?.notice && !mobileBusy && !quizOpen && (

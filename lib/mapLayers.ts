@@ -124,7 +124,7 @@ export const URBAN_STOPS = {
   light: [[0, '#e34948'], [0.5, '#f0efec'], [1, '#2a78d6']] as [number, string][],
   dark: [[0, '#e66767'], [0.5, '#383835'], [1, '#3987e5']] as [number, string][],
 };
-const NO_DATA = { light: '#d6d5d1', dark: '#3a3a38' };
+export const NO_DATA = { light: '#d6d5d1', dark: '#3a3a38' };
 
 const density: ExpressionSpecification = ['/', ['get', 'n'], ['max', ['coalesce', ['get', 'km2'], 1], 0.01]];
 
