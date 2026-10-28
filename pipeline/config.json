@@ -1,0 +1,6 @@
+{
+  "detailAreas": ["SY", "TF", "WV", "DY"],
+  "includeNorthernIreland": false,
+  "absorbFragmentsUpTo": 3,
+  "simplifyMetres": { "areas": 120, "districts": 25, "sectors": 6, "land": 250 }
+}

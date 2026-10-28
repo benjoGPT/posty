@@ -1,0 +1,41 @@
+{
+  "name": "postcode-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interactive UK postcode map: areas, districts, sectors and individual postcodes with zoom-aware detail.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "npx serve out",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test pipeline/test/*.test.mjs",
+    "data:land": "node pipeline/land.mjs",
+    "data:glyphs": "node pipeline/glyphs.mjs",
+    "data:build": "node --max-old-space-size=8192 pipeline/build.mjs",
+    "data:verify": "node pipeline/verify.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "maplibre-gl": "^5.24.0",
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@fontsource/noto-sans": "^5.3.0",
+    "@geo-maps/countries-land-100m": "^0.6.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "delaunator": "^5.1.0",
+    "maplibre-font-maker-node": "^0.5.0",
+    "mapshaper": "^0.7.100",
+    "postcss": "^8.5.32",
+    "proj4": "^2.22.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

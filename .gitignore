@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*.local
+# Raw source downloads (ONSPD etc.) are large; keep them out of git.
+raw/
+.DS_Store
