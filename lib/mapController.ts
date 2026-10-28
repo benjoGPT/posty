@@ -11,13 +11,14 @@ import {
   applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, setPriceScale, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
   PLACE_STYLE, PLACES_SOURCE, type BorderOptions, type ColourMode, type PlaceToggles, type RegionLevel, type Theme,
 } from './mapLayers';
+import type { NamedTarget } from './namedSearch';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
 
 export interface MapViewState {
   level: Level;
   loading: boolean;
-  basemap: 'hosted' | 'offline';
+  basemap: 'hosted' | 'offline' | 'loading';
   notice: null | 'outside-detail' | 'zoom-for-units';
   centreArea: string | null;
 }
@@ -92,6 +93,7 @@ export class MapController {
   private hovered: { source: string; id: string } | null = null;
   private selection: Selection | null = null;
   private marker: maplibregl.Marker | null = null;
+  private searchMarker: maplibregl.Marker | null = null;
   private meMarker: maplibregl.Marker | null = null;
   private renderQueued = false;
   private hoverQueued: MapMouseEvent | null = null;
@@ -106,8 +108,17 @@ export class MapController {
     data: PostcodeData,
     opts: ControllerOptions,
   ): Promise<MapController> {
-    const { style, hosted } = await loadBasemap(basemapById(opts.basemap));
-    return new MapController(container, data, style, hosted, opts);
+    const basemap = basemapById(opts.basemap);
+    const controller = new MapController(container, data, fallbackStyle(basemap.theme as Theme, window.location.origin, data.baseUrl), true, opts);
+    if (basemap.url) {
+      controller.emit({basemap:'loading'});
+      void loadBasemap(basemap).then(({style,hosted}) => {
+        if(controller.destroyed || controller.opts.basemap !== basemap.id)return;
+        if(hosted)controller.map.setStyle(style,{diff:false});
+        controller.emit({basemap:hosted?'hosted':'offline'});
+      }).catch(() => {if(!controller.destroyed)controller.emit({basemap:'offline'});});
+    }
+    return controller;
   }
 
   private constructor(
@@ -168,6 +179,7 @@ export class MapController {
     this.resizeObserver.disconnect();
     this.marker?.remove();
     this.meMarker?.remove();
+    this.searchMarker?.remove();
     this.map.remove();
   }
 
@@ -206,6 +218,18 @@ export class MapController {
     if (this.destroyed || this.opts.basemap !== id) return;
     this.map.setStyle(style, { diff: false });
     this.emit({ basemap: hosted ? 'hosted' : 'offline' });
+  }
+
+  focusNamed(target: NamedTarget, padding: Padding): void {
+    this.searchMarker?.remove();
+    const label = document.createElement('div');
+    const title = document.createElement('strong'); title.textContent = target.title;
+    const context = document.createElement('p'); context.textContent = target.subtitle;
+    const source = document.createElement('small'); source.textContent = 'OS Open Names · street/place reference point, not a house address';
+    label.append(title, context, source);
+    this.searchMarker = new maplibregl.Marker({color:'#2563eb'}).setLngLat([target.lng,target.lat]).setPopup(new maplibregl.Popup({offset:25}).setDOMContent(label)).addTo(this.map);
+    this.map.flyTo({center:[target.lng,target.lat],zoom:target.kind==='street'?15:12,padding,duration:reducedMotion()?0:700});
+    this.searchMarker.togglePopup();
   }
 
   setColourMode(mode: ColourMode): void {
@@ -606,6 +630,8 @@ export class MapController {
   // ---------------------------------------------------------------------------
 
   setSelection(sel: Selection | null): void {
+    this.searchMarker?.remove();
+    this.searchMarker = null;
     this.selection = sel;
     this.applySelection();
   }

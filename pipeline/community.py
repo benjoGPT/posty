@@ -30,7 +30,8 @@ def metric(id,title,topic,unit,stops,source,period,note,precision=1):
  metrics.append(dict(id=id,title=title,topic=topic,unit=unit,stops=stops,source=source,period=period,note=note,precision=precision,status='available' if any(id in g for g in regions.values()) else 'unavailable'))
 # Geography from the authenticated publisher's August 2026 release; original map geometry is preserved.
 geog_path=RAW/'derived/community-geography.json'
-if not geog_path.exists():
+membership_hash=hashlib.sha256('\n'.join(sorted(current)).encode()).hexdigest()
+if not geog_path.exists() or json.loads(geog_path.read_text()).get('membershipHash')!=membership_hash:
  archive=fetch('https://www.arcgis.com/sharing/rest/content/items/9e5a92a3cfb14dc7ad43d6ea7a7b8c7f/data',RAW/'onspd-geography.zip')
  counts=collections.defaultdict(collections.Counter);matched=collections.Counter();source_n=0
  for row in rows_zip(archive,lambda n:'/multi_csv/' in n and n.endswith('.csv')):
@@ -42,7 +43,7 @@ if not geog_path.exists():
   for c in cs:
    matched[c]+=1
    if lsoa.startswith(('E','W')):counts[c][lsoa]+=1
- geog={'source':'ONSGeography_data ONSPD August 2026','matched':dict(matched),'counts':{k:dict(v) for k,v in counts.items()},'sourceRows':source_n}
+ geog={'membershipHash':membership_hash,'source':'ONSGeography_data ONSPD August 2026','matched':dict(matched),'counts':{k:dict(v) for k,v in counts.items()},'sourceRows':source_n}
  geog_path.parent.mkdir(parents=True,exist_ok=True);geog_path.write_text(json.dumps(geog,separators=(',',':')))
 else:geog=json.loads(geog_path.read_text())
 print('Geography:',geog['sourceRows'],'current-map matches',flush=True)
@@ -96,11 +97,40 @@ source='https://www.nomisweb.co.uk/census/2021/bulk'
 for key,title,unit,stops in [('population','Estimated residents','people',[0,1000,10000,100000,1000000]),('population_density','Estimated residents per km²','people/km²',[0,100,500,2000,10000]),('mean_age','Approximate mean age','years',[20,30,40,50,60]),('children','Residents aged under 15','%',[0,10,20,30,40]),('older','Residents aged 65+','%',[0,10,20,30,50])]:metric(key,title,'People',unit,stops,source,'Census 2021',CENSUS_NOTE,0 if key in ('population','population_density') else 1)
 for key,title in [('owned','Owner occupation (incl. shared)'),('private_rent','Private renting'),('social_rent','Social renting'),('detached','Detached homes'),('semi','Semi-detached homes'),('terraced','Terraced homes'),('flats','Flats and converted homes'),('crowded','Overcrowded homes')]:metric(key,title,'Housing','%',[0,10,25,50,100],source,'Census 2021',CENSUS_NOTE+' Percentages refer to occupied households. Overcrowded means negative bedroom occupancy rating.')
 print('Census:',sum('population' in g for g in regions.values()),'postal regions',flush=True)
+# More recent people estimates, housing remains Census 2021.
+import openpyxl
+pop_url='https://www.ons.gov.uk/file?uri=%2Fpeoplepopulationandcommunity%2Fpopulationandmigration%2Fpopulationestimates%2Fdatasets%2Flowersuperoutputareamidyearpopulationestimates%2Fmid2022revisednov2025tomid2024%2Fsapelsoasyoa20222024.xlsx'
+pop_cache=RAW/'derived/population2024.json'
+if not pop_cache.exists():
+ book=openpyxl.load_workbook(fetch(pop_url,RAW/'population2024.xlsx'),read_only=True,data_only=True);sheet=book['Mid-2024 LSOA 2021'];popdata={}
+ for r in sheet.iter_rows(min_row=5,values_only=True):
+  if not isinstance(r[2],str) or not r[2].startswith(('E01','W01')):continue
+  ages=[float(r[5+i] or 0)+float(r[96+i] or 0) for i in range(91)]
+  if abs(sum(ages)-float(r[4]))>.1:raise ValueError('Population age totals do not reconcile')
+  popdata[r[2]]=[float(r[4]),sum(ages[:15]),sum(ages[65:]),sum(v*(92.5 if i==90 else i) for i,v in enumerate(ages))]
+ if len(popdata)<35000:raise ValueError('Incomplete population workbook')
+ pop_cache.write_text(json.dumps(popdata,separators=(',',':')))
+else:popdata=json.loads(pop_cache.read_text())
+for code,counts in geog['counts'].items():
+ if 'population' not in regions.get(code,{}):continue
+ totals=[0.,0.,0.,0.];known=0
+ for lsoa,pcs in counts.items():
+  if lsoa not in popdata:continue
+  known+=pcs;weight=pcs/all_lsoa[lsoa]
+  totals=[t+v*weight for t,v in zip(totals,popdata[lsoa])]
+ if known/max(1,sum(counts.values()))<.98:
+  for key in ('population','population_density','mean_age','children','older'):regions[code].pop(key,None)
+  continue
+ total,children,older,age_sum=totals;put(code,'population',total);km2=region_info.get(code,{}).get('km2');put(code,'population_density',total/km2 if km2 and km2>0 else None);put(code,'children',children/total*100);put(code,'older',older/total*100);put(code,'mean_age',age_sum/total)
+for m in metrics:
+ if m['topic']=='People':
+  m.update(source='https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates',period='Mid-2024 estimates',note='ONS mid-2024 LSOA estimates, England and Wales. Postal-region estimates allocated by current postcode shares, not address/resident locations. Geography coverage at least 95%, population coverage at least 98%. Single-year ages are supporting information; 90+ group assumed 92.5 for approximate mean age. Housing statistics remain Census 2021. Scotland unavailable.')
+print('Mid-2024 population imported',len(popdata),'LSOAs',flush=True)
 # Broadband: Ofcom no longer publishes robust postcode actual-speed estimates.
-bb=fetch('https://www.ofcom.org.uk/siteassets/resources/documents/research-and-data/multi-sector/infrastructure-research/connected-nations-2025/202507_fixed_broadband_coverage_r01.zip?v=407830',RAW/'ofcom2025.zip')
-z=zipfile.ZipFile(bb);q=zipfile.ZipFile(io.BytesIO(z.read(next(n for n in z.namelist() if n.endswith('_pc_coverage_r01.zip')))));acc=collections.defaultdict(lambda:collections.defaultdict(list))
+bb=fetch('https://www.ofcom.org.uk/siteassets/resources/documents/research-and-data/multi-sector/infrastructure-research/connected-nations-spring-2026/202601_fixed_broadband_coverage_and_full_fibre_take-up-r1.zip',RAW/'ofcom2026.zip')
+q=zipfile.ZipFile(bb);acc=collections.defaultdict(lambda:collections.defaultdict(list))
 for name in q.namelist():
- if '/postcode_res_files/' not in name or not name.endswith('.csv'):continue
+ if '/postcode_res_files_r1/' not in name or not name.endswith('.csv'):continue
  for row in csv.DictReader(io.TextIOWrapper(q.open(name),encoding='utf-8-sig')):
   if row['postcode'] not in current:continue
   for key,col in [('gigabit','Gigabit availability (% premises)'),('superfast','SFBB availability (% premises)'),('slow_broadband','% of premises unable to receive 10Mbit/s')]:
@@ -111,7 +141,7 @@ for name in q.namelist():
 for c,gg in acc.items():
  for key,values in gg.items():
   if len(values)>=5:put(c,key,sum(values)/len(values))
-for key,title in [('gigabit','Gigabit availability'),('superfast','Superfast availability'),('slow_broadband','Unable to receive 10 Mbps')]:metric(key,title,'Connectivity','%',[0,25,50,75,100],'https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-20252/data-downloads-2025','July 2025','Unweighted mean of residential postcode availability percentages, not an area-wide premises percentage. Minimum five matched postcodes. Availability is not experienced speed or take-up; gigabit includes cable as well as fibre.')
+for key,title in [('gigabit','Gigabit availability'),('superfast','Superfast availability'),('slow_broadband','Unable to receive 10 Mbps')]:metric(key,title,'Connectivity','%',[0,25,50,75,100],'https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-update-spring-2026','January 2026','Unweighted mean of residential postcode availability percentages, not an area-wide premises percentage. Minimum five matched postcodes. Availability is not experienced speed or take-up; gigabit includes cable as well as fibre.')
 print('Broadband complete',flush=True)
 # Crime counts are allocated by anonymised points to the map's approximate boundaries.
 if not a.skip_crime:
@@ -173,7 +203,7 @@ if not a.skip_crime:
    for key,col in [('crime_rate','crime'),('burglary_rate','burglary'),('vehicle_rate','vehicle'),('theft_rate','theft'),('asb_rate','asb')]:
     if g['latest_'+col]>0:put(c,key,g['latest_'+col]/pop*1000)
  period=months[12]+' to '+months[-1]
- CRIME_NOTE='Police-recorded incidents, not personal risk. Anonymised points assigned to approximate postal polygons. Rates divide by estimated Census 2021 residents; visitors inflate town-centre rates. At least 250 estimated residents. Scotland/NI not covered. No observations stays grey, not zero. Source force/month gaps can undercount; see data provenance.'
+ CRIME_NOTE='Police-recorded incidents, not personal risk. Anonymised points assigned to approximate postal polygons. Rates divide by estimated mid-2024 residents; visitors inflate town-centre rates. At least 250 estimated residents. Scotland/NI not covered. No observations stays grey, not zero. Source force/month gaps can undercount; see data provenance.'
  for key,title,unit,stops in [('crime_count','Recorded crime incidents','incidents',[0,100,500,2000,10000]),('crime_rate','Recorded crime per 1,000','per 1,000',[0,25,50,100,250]),('burglary_rate','Burglary per 1,000','per 1,000',[0,2,5,10,25]),('vehicle_rate','Vehicle crime per 1,000','per 1,000',[0,2,5,10,25]),('theft_rate','Theft per 1,000','per 1,000',[0,5,15,30,75]),('asb_rate','ASB incidents per 1,000','per 1,000',[0,5,15,30,75]),('crime_change','Recorded crime change','% change',[-50,-25,0,25,50])]:metric(key,title,'Safety',unit,stops,'https://data.police.uk/about/',period,CRIME_NOTE+(' Comparison uses the preceding 12 months, minimum 20 incidents per period.' if key=='crime_change' else ''))
  crime_meta={'months':months,'forcesByMonth':source_forces,'missingComparedWithUnion':missing,'unlocatedRows':unlocated,'sourceRows':source_rows,'source':crime_url}
 else:crime_meta={'status':'not imported'}

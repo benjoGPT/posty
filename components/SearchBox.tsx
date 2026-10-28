@@ -2,10 +2,10 @@
 
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import type { PostcodeData } from '@/lib/data';
-import { resolveQuery, suggest, type RegionKind, type Suggestion } from '@/lib/search';
+import { resolveQuery, suggest, type SearchTarget, type Suggestion } from '@/lib/search';
 import { AlertIcon, CloseIcon, SearchIcon } from './Icons';
 
-export type NavTarget = { kind: RegionKind | 'unit'; code: string };
+export type NavTarget = SearchTarget;
 export type NavResult = { ok: true } | { ok: false; message: string };
 
 interface Props {
@@ -20,7 +20,7 @@ export interface SearchBoxHandle {
   focus: () => void;
 }
 
-const KIND_LABEL: Record<Suggestion['kind'], string> = { area: 'Area', district: 'District', sector: 'Sector', unit: 'Postcode' };
+const KIND_LABEL: Record<Suggestion['kind'], string> = { area: 'Area', district: 'District', sector: 'Sector', unit: 'Postcode', place: 'Place', street: 'Street' };
 
 export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({ data, onNavigate, recent, onClearRecent }, ref) {
   const [query, setQuery] = useState('');
@@ -38,9 +38,9 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
     if (!data || !query.trim()) { setItems([]); return; }
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
-      const s = await suggest(query, data, ctrl.signal).catch(() => []);
+      const s = await suggest(query, data, ctrl.signal).catch((error: Error) => { if (!ctrl.signal.aborted) setMessage(error.message); return []; });
       if (!ctrl.signal.aborted) { setItems(s); setActive(-1); }
-    }, 120);
+    }, 250);
     return () => { clearTimeout(timer); ctrl.abort(); };
   }, [query, data]);
 
@@ -51,7 +51,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
     setBusy(false);
     setOpen(false);
     if (r.ok) {
-      setQuery(target.code);
+      setQuery(target.kind === 'place' || target.kind === 'street' ? target.title : target.code);
       inputRef.current?.blur();
     } else setMessage(r.message);
   }
@@ -60,19 +60,19 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
     if (!data) return;
     if (active >= 0 && shown[active]) return go(shown[active]);
     setBusy(true);
-    const r = await resolveQuery(query, data);
+    const r = await resolveQuery(query, data).catch((e: Error) => ({ok:false as const,message:e.message}));
     setBusy(false);
     if (r.ok) return go(r.target);
     setOpen(false);
     setMessage(r.message);
   }
 
-  const recentItems: Suggestion[] = recent.map((t) => ({ kind: t.kind, code: t.code, title: t.code, subtitle: 'Recent search' }));
+  const recentItems: Suggestion[] = recent.map(t => t.kind === 'place' || t.kind === 'street' ? {...t, subtitle:'Recent search'} : {...t, title:t.code, subtitle:'Recent search'});
   const shown = query.trim() ? items : recentItems;
   const showList = open && shown.length > 0;
 
   return (
-    <div className="pointer-events-auto relative w-full md:w-[380px]">
+    <div className="pointer-events-auto relative w-full max-w-full md:w-[640px]">
       <form
         role="search"
         onSubmit={(e) => { e.preventDefault(); void submit(); }}
@@ -81,6 +81,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
         <SearchIcon className={busy ? 'animate-pulse text-accent' : 'text-faint'} />
         <input
           ref={inputRef}
+          maxLength={120}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); setMessage(null); }}
           onFocus={() => { setOpen(true); setActive(-1); }}
@@ -90,15 +91,15 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); }
             else if (e.key === 'Escape') { if (open && items.length) setOpen(false); else inputRef.current?.blur(); }
           }}
-          placeholder="Search a postcode or area"
-          aria-label="Search postcodes"
+          placeholder="Search a postcode, place or street"
+          aria-label="Search postcodes, places and streets"
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
           autoComplete="off"
-          autoCapitalize="characters"
+          autoCapitalize="words"
           spellCheck={false}
           enterKeyHint="search"
           className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-faint md:text-[15px]"
@@ -116,7 +117,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
       </form>
 
       {showList && (
-        <ul id={listId} role="listbox" aria-label="Suggestions" className="animate-in absolute inset-x-0 top-[52px] z-30 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-float">
+        <ul id={listId} role="listbox" aria-label="Suggestions" className="animate-in absolute inset-x-0 top-[52px] z-30 max-h-[min(60dvh,480px)] overflow-y-auto rounded-xl border border-line bg-surface py-1 shadow-float">
           {shown.map((s, i) => (
             <li
               key={`${s.kind}:${s.code}`}
@@ -129,11 +130,12 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
             >
               <span className="w-[62px] shrink-0 text-[11px] font-medium tracking-wide text-faint uppercase">{KIND_LABEL[s.kind]}</span>
               <span className="min-w-0 flex-1">
-                <span className="pc-code block truncate text-[14px] font-semibold text-ink">{s.title}</span>
+                <span className="block truncate text-[14px] font-semibold text-ink">{s.title}</span>
                 <span className="block truncate text-[12px] text-muted">{s.subtitle}</span>
               </span>
             </li>
           ))}
+          {query.trim() && <li role="presentation" className="border-t border-line px-3.5 py-2 text-[10.5px] text-muted">Streets and places: OS Open Names · Great Britain · add a town for common street names.</li>}
           {!query.trim() && (
             <li role="presentation" className="flex justify-end border-t border-line px-3.5 pt-1.5 pb-1">
               <button type="button" onMouseDown={(e) => { e.preventDefault(); onClearRecent(); }} className="text-[12px] font-medium text-muted hover:text-ink">

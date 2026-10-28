@@ -145,13 +145,21 @@ export default function Explorer() {
   /** Navigates to a search/link target, validating it against the data. */
   const navigate = useCallback(async (target: NavTarget, fly = true): Promise<NavResult> => {
     if (!data || !ctrl.current) return { ok: false, message: 'The map is still loading.' };
+    if (target.kind === 'place' || target.kind === 'street') {
+      if (!Number.isFinite(target.lng) || !Number.isFinite(target.lat) || target.lat < 49 || target.lat > 61 || target.lng < -9 || target.lng > 3) return {ok:false,message:'This search result has no usable GB location.'};
+      select(null);
+      ctrl.current.focusNamed(target, padding(false));
+      return {ok:true};
+    }
     if (target.kind === 'unit') {
       const r = await resolveUnit(target.code, data);
       if (!r.ok) return r;
+      if (data.areas.has(areaOf(r.selection.code))) await data.loadDistricts(areaOf(r.selection.code)).catch(() => null);
       select(r.selection, { fly });
       return { ok: true };
     }
     const { kind, code } = target;
+    if (kind === 'district') await data.loadDistricts(areaOf(code)).catch(() => null);
     if (kind === 'area' && !data.areas.has(code)) return { ok: false, message: `There is no postcode area called ${code}.` };
     if (kind === 'district' && !data.districts.has(code)) return { ok: false, message: `There is no postcode district called ${code}.` };
     if (kind === 'sector') {
@@ -180,6 +188,8 @@ export default function Explorer() {
 
     (async () => {
       const d = new PostcodeData();
+      const engine = import('@/lib/mapController');
+      engine.catch(() => {});
       try {
         await d.init();
       } catch (e) {
@@ -187,7 +197,9 @@ export default function Explorer() {
         return;
       }
       if (cancelled || !mapEl.current) return;
-      const { MapController } = await import('@/lib/mapController');
+      let loadedEngine;
+      try { loadedEngine = await engine; } catch { if(!cancelled)setFatal('Couldn’t load the map engine. Check your connection and try again.'); return; }
+      const { MapController } = loadedEngine;
       if (cancelled || !mapEl.current) return;
       try {
         controller = await MapController.create(mapEl.current, d, {
@@ -425,7 +437,7 @@ export default function Explorer() {
 
       <div className="pointer-events-none absolute inset-0 z-20">
         {!quizOpen && (
-          <div className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 left-3 flex flex-col gap-2 md:right-auto">
+          <div className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 left-3 flex flex-col gap-2 md:right-auto" style={{maxWidth: !isMobile && selection && panel ? 'calc(100% - 408px)' : 'calc(100% - 24px)'}}>
             <SearchBox ref={search} data={data} onNavigate={searchNavigate} recent={prefs.recent} onClearRecent={() => updatePrefs({ recent: [] })} />
             <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} compact={isMobile} onOpenOptions={() => setLayersOpen(true)} />
           </div>

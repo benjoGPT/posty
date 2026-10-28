@@ -10,3 +10,5 @@ raw/
 
 __pycache__/
 *.pyc
+
+public/data/releases/

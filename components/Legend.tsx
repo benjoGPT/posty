@@ -8,7 +8,7 @@ import { LayersIcon } from './Icons';
 
 interface Props {
   level: Level;
-  basemap: 'hosted' | 'offline';
+  basemap: 'hosted' | 'offline' | 'loading';
   colourMode: ColourMode;
   borders: BorderOptions;
   theme: Theme;
@@ -100,6 +100,7 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
         <button onClick={onAbout} className="font-medium text-accent-text underline-offset-2 hover:underline">About the data</button>
         {unofficialData && ' · unofficial ONS copy'}
       </p>
+      {basemap === 'loading' && <p className="mt-1.5 leading-snug text-muted">Loading background map…</p>}
       {basemap === 'offline' && <p className="mt-1.5 leading-snug text-warn">Basemap unavailable — showing coastline only.</p>}
     </section>
   );

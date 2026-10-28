@@ -31,6 +31,7 @@ const SOURCES = {
   wiki: (area) => `${GH}/missinglink/uk-postcode-polygons/master/geojson/${area}.geojson`,
 };
 
+const includesNI = JSON.parse(fs.readFileSync(path.join(DATA,'manifest.json'),'utf8')).coverage.includesNorthernIreland;
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith('--') ? [...acc, [a.slice(2), all[i + 1]?.startsWith('--') ? true : all[i + 1] ?? true]] : acc), []),
 );
@@ -91,7 +92,7 @@ if (args.input) {
     input: args.input,
     onRecord(raw, lat, lng) {
       const pc = normalisePostcode(raw);
-      if (pc) ours.set(pc, [lat, lng]);
+      if (pc && (!pc.startsWith('BT') || includesNI)) ours.set(pc, [lat, lng]);
     },
   });
 } else {

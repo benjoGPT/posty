@@ -8,7 +8,7 @@ export const APP_CONFIG = {
   name: 'Postcode Explorer',
 
   /** Where static postcode data is served from (output of `npm run data:build`). */
-  dataBaseUrl: process.env.NEXT_PUBLIC_DATA_BASE_URL ?? '/data',
+  dataBaseUrl: process.env.NEXT_PUBLIC_DATA_BASE_URL ?? (process.env.NEXT_PUBLIC_DATA_RELEASE ? `/data/releases/${process.env.NEXT_PUBLIC_DATA_RELEASE}` : '/data'),
 
   /** Postcode lookup/autocomplete API (UK-wide). Used for search and for administrative details. */
   lookupApiUrl: process.env.NEXT_PUBLIC_LOOKUP_API_URL ?? 'https://api.postcodes.io',

@@ -142,15 +142,15 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
             <Block title="Deprivation and price change">
               <p>English IMD 2025 comes from the official MHCLG postcode join, matched to this map’s postcode dataset. It shows a postcode-weighted mean LSOA decile, not a population-weighted score. 1 is most deprived and 10 least. Wales and Scotland have separate indices and are not compared; border regions represent English records only.</p>
               <p>Price change compares the last two complete calendar years available within the sale extract, with at least 20 sales in each. Changes in the kinds of property sold affect the result; it is not an individual house-price growth estimate.</p>
-              <p>Source: MHCLG, English Indices of Deprivation 2025, licensed under the Open Government Licence v3.0. Grey means unavailable or insufficient data. The postcode provenance warning still applies.</p>
+              <p>Source: MHCLG, English Indices of Deprivation 2025, licensed under the Open Government Licence v3.0. Grey means unavailable or insufficient data. The source and release for the postcode build are shown above.</p>
             </Block>
             <Block title="People, homes and broadband">
-              <p>Census 2021 (ONS, England and Wales) supplies population, age, tenure, housing types and overcrowding. LSOA totals are allocated to postal regions by current postcode shares, so these are estimates, not official postcode statistics or current population counts. Scotland is unavailable.</p>
-              <p>© Ofcom, Connected Nations 2025: July 2025 residential coverage shows the mean of matched postcode availability percentages. It is not premises-weighted and does not measure experienced speeds. Dates, sources and definitions appear beside each measure.</p>
+              <p>ONS mid-2024 estimates supply population and age for England and Wales. Census 2021 supplies tenure, housing types and overcrowding. LSOA totals are allocated to postal regions by current postcode shares, so these are estimates, not official postcode statistics or live population counts. Scotland is unavailable.</p>
+              <p>© Ofcom, Connected Nations Spring 2026: January 2026 residential coverage shows the mean of matched postcode availability percentages. It is not premises-weighted and does not measure experienced speeds. Dates, sources and definitions appear beside each measure.</p>
             </Block>
             <Block title="Recorded crime">
               <p>Police.uk, September 2025 to August 2026, with the previous twelve months for trends. Anonymised locations are assigned to approximate postal boundaries. Counts exclude antisocial behaviour, which has a separate measure. British Transport Police records are excluded to avoid mixing territorial coverage.</p>
-              <p>Rates use estimated Census 2021 residents. City centres can have high rates because visitors are not counted as residents. These are recorded events, not a personal safety prediction. Regions with missing police-force months, including Greater Manchester and Gloucester in this snapshot, are unavailable; grey does not mean zero crime.</p>
+              <p>Rates use estimated mid-2024 residents. City centres can have high rates because visitors are not counted as residents. These are recorded events, not a personal safety prediction. Regions with missing police-force months, including Greater Manchester and Gloucester in this snapshot, are unavailable; grey does not mean zero crime.</p>
             </Block>
             <Block title="Access and the environment">
               <p>Access measures are median straight-line distances from mapped postcode points to mapped services, in SY, TF, WV and DY. Listings and coverage may be incomplete. Park points are centres, not entrances; distances are not walking times or guarantees of public access, school admission or GP availability.</p>
@@ -159,6 +159,10 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
             </Block>
             <Block title="Postcode points">
               <p>Each dot is the postcode’s official reference coordinate, not an address. Several postcodes (e.g. PO boxes, large businesses) can share one point.</p>
+            </Block>
+            <Block title="Street and place search">
+              <p>OS Open Names supplies named streets, settlements and rail stations across Great Britain. Results are reference locations, not individual house addresses. Searches use this site's own data files; your query is not sent to a geocoding provider.</p>
+              <p>Contains OS data © Crown copyright and database rights 2026. Contains Royal Mail data © Royal Mail copyright and database right 2026. Contains National Statistics data © Crown copyright and database right 2026. OS OpenData licence / Open Government Licence.</p>
             </Block>
             <Block title="Search and details">
               <p>

@@ -22,7 +22,7 @@ const RAW = path.join(ROOT, 'raw/reference');
 const REF = path.join(ROOT, 'pipeline/reference');
 const GH = 'https://raw.githubusercontent.com';
 const SOURCES = {
-  lad2021: [`${GH}/ONSvisual/topojson_boundaries/master/geogLA2021UK.json`, 'geogLA2021UK.json'],
+  lad2026: ['https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_May_2026_Boundaries_UK_BUC/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson','councils2026.geojson'],
   lad2013: [`${GH}/martinjc/UK-GeoJSON/master/json/administrative/gb/lad.json`, 'martinjc-gb-lad.json'],
 };
 
@@ -42,9 +42,9 @@ const COUNTRY = { E: 'England', W: 'Wales', S: 'Scotland', N: 'Northern Ireland'
 
 // 1. Councils (2021 codes and names).
 {
-  const topo = JSON.parse(await fetchOnce(SOURCES.lad2021));
+  const topo = JSON.parse(await fetchOnce(SOURCES.lad2026));
   const out = await mapshaper.applyCommands(
-    `-i lad.json -each "c=AREACD, name=AREANM, ctry=${JSON.stringify(COUNTRY).replace(/"/g, "'")}[AREACD[0]], delete AREACD, delete AREANM" -o format=geojson precision=0.0001 councils.json`,
+    `-i lad.json -each "c=LAD26CD, name=LAD26NM, ctry=${JSON.stringify(COUNTRY).replace(/"/g, "'")}[LAD26CD[0]]" -o format=geojson precision=0.0001 councils.json`,
     { 'lad.json': topo },
   );
   fs.writeFileSync(path.join(REF, 'councils.geojson'), out['councils.json']);

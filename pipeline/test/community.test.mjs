@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import ts from 'typescript';
 const d=JSON.parse(fs.readFileSync('public/data/community.json','utf8'));
+for(const f of fs.readdirSync('public/data/region-stats'))Object.assign(d.regions,JSON.parse(fs.readFileSync('public/data/region-stats/'+f,'utf8')).community);
 const provenance=JSON.parse(fs.readFileSync('public/data/community/provenance.json','utf8'));
 const metrics=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(fs.readFileSync('lib/metrics.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64'));
 test('source-described measures have ordered stops, finite values and honest coverage',()=>{
@@ -14,7 +15,7 @@ test('crime periods, force masks and resident-rate calculations reconcile',()=>{
  assert.ok(provenance.crime.sourceRows>1_000_000);assert.ok(provenance.crime.unlocatedRows>0);
 });
 test('sector metrics are lazy shards and unavailable imports are not live filters',()=>{
- assert.ok(!Object.keys(d.regions).some(c=>c.includes(' ')));const sector=JSON.parse(fs.readFileSync('public/data/community/sectors/SY.json','utf8'));assert.ok(sector['SY1 1'].population>0);assert.ok(sector['SY1 1'].green_distance>=0);
+ const startup=JSON.parse(fs.readFileSync('public/data/community.json','utf8'));assert.ok(!Object.keys(startup.regions).some(c=>/\d/.test(c)));assert.ok(startup.regionalShards);const sector=JSON.parse(fs.readFileSync('public/data/community/sectors/SY.json','utf8'));assert.ok(sector['SY1 1'].population>0);assert.ok(sector['SY1 1'].green_distance>=0);
  assert.ok(d.availability.some(x=>x.id==='epc_score'&&x.status==='access-required'));assert.ok(d.availability.some(x=>x.id==='planning'&&x.status==='source-gap'));assert.ok(!d.metrics.some(m=>['epc_score','planning_count'].includes(m.id)&&m.status==='available'));
  const places=JSON.parse(fs.readFileSync('public/data/places/SY.json','utf8'));for(const k of ['parks','pharmacies','supermarkets'])assert.ok(places[k].length>0);
 });

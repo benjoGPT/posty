@@ -11,6 +11,7 @@ export type BBox = [number, number, number, number]; // west, south, east, north
 
 export interface Manifest {
   schema: number;
+  regionalShards?: boolean;
   generatedAt: string;
   source: {
     id: string;
@@ -77,6 +78,7 @@ export class PostcodeData {
   manifest!: Manifest;
   insights: Insights | null = null;
   community: CommunityData | null = null;
+  regionalFailures = new Set<string>();
   areas = new Map<string, AreaInfo>();
   districts = new Map<string, DistrictInfo>();
   districtsByArea = new Map<string, DistrictInfo[]>();
@@ -149,19 +151,38 @@ export class PostcodeData {
     return this.areas.get(area)?.detail ?? false;
   }
 
-  loadDistricts(area: string): Promise<RegionCollection> {
-    return this.fetchJson<RegionCollection>(`districts/${area}.geojson`);
+  private async loadRegionStats(area: string): Promise<void> {
+    if (!this.manifest.regionalShards) return;
+    const stats = await this.fetchJson<{community: Record<string,Record<string,number>>; insights: Record<string,InsightProps>; details: Record<string,RegionExtras & {adm?: AdminBreakdown}>}>(`region-stats/${area}.json`);
+    this.regionalFailures.delete(area);
+    if(this.community) Object.assign(this.community.regions,stats.community);
+    if(this.insights) Object.assign(this.insights.groups,stats.insights);
+    for(const [code,detail] of Object.entries(stats.details)) { const d=this.districts.get(code); if(d)Object.assign(d,detail,stats.insights[code]??{}); }
   }
 
-  /** Sector boundaries exist only for detail areas; resolves null elsewhere. */
+  private enrichFeatures(fc: RegionCollection): RegionCollection {
+    for(const f of fc.features){
+      const values=this.community?.regions[f.properties.c];
+      if(values)Object.assign(f.properties,Object.fromEntries(Object.entries(values).map(([k,v])=>['mx_'+k,v])));
+      Object.assign(f.properties,this.insights?.groups[f.properties.c]??{});
+    }
+    return fc;
+  }
+
+  async loadDistricts(area: string): Promise<RegionCollection> {
+    const [fc] = await Promise.all([this.fetchJson<RegionCollection>(`districts/${area}.geojson`),this.loadRegionStats(area).catch(()=>{this.regionalFailures.add(area);})]);
+    return this.enrichFeatures(fc);
+  }
+
+  /** Sector geometry is local detail; its statistical chunk is shared with districts. */
   async loadSectors(area: string): Promise<RegionCollection | null> {
     if (!this.isDetailArea(area)) return null;
     const [fc, values] = await Promise.all([
       this.fetchJson<RegionCollection>(`sectors/${area}.geojson`),
-      this.community ? this.fetchJson<Record<string,Record<string,number>>>(`community/sectors/${area}.json`).catch(()=>null) : Promise.resolve(null),
+      this.manifest.regionalShards ? this.loadRegionStats(area).then(()=>null).catch(()=>{this.regionalFailures.add(area);return null;}) : this.community ? this.fetchJson<Record<string,Record<string,number>>>(`community/sectors/${area}.json`).catch(()=>null) : Promise.resolve(null),
     ]);
-    if(values&&this.community){Object.assign(this.community.regions,values);for(const f of fc.features){const v=values[f.properties.c];if(v)Object.assign(f.properties,Object.fromEntries(Object.entries(v).filter(([,n])=>Number.isFinite(n)).map(([k,n])=>['mx_'+k,n])));}}
-    return fc;
+    if(values&&this.community)Object.assign(this.community.regions,values);
+    return this.enrichFeatures(fc);
   }
 
   /** Postcode unit points for a district (detail areas only). */

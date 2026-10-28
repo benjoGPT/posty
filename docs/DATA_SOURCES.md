@@ -50,13 +50,9 @@ or business-listing (Overture places) data, not the official registers:
   separately. NaPTAN would be the official stop list.
 - Distances are straight-line, not walking routes.
 
-## Not yet included (and why)
+## Current gaps
 
-Census population/age (Nomis), broadband speeds (Ofcom, needs an API key) and
-flood risk (Environment Agency / Natural Resources Wales) are all openly
-licensed, but their download hosts were not reachable from the environment the
-data was built in. Each could be added as a pipeline step run from the GitHub
-Action, like the official ONSPD download.
+EPC needs an authorised export, planning needs a verified reusable council feed, and flood coverage remains England river/sea only. Northern Ireland and full house-address data are not included. See the latest continuation below for datasets refreshed in October2026.
 
 ## Why ONSPD
 
@@ -211,3 +207,17 @@ Census, ONSPD and police data: Open Government Licence v3.0, with ONS, OS, Royal
 The [national Planning Data planning-application dataset](https://www.planning.data.gov.uk/dataset/planning-application) reported zero records when checked. This is a source gap, not zero local planning activity. The optional council CSV importer uses `reference,authority,postcode,submitted`, deduplicates authority/reference, and reports matched applications submitted in the last365days. Authority/export coverage must be supplied and disclosed before interpreting counts. Use the [official planning register finder](https://www.gov.uk/search-register-planning-decisions) meanwhile.
 
 Install `pip install -r pipeline/requirements-community.txt`. After `data:build` and `data:places`, run `npm run data:amenities` then `npm run data:community`. Optional files can be supplied to `python3 pipeline/community.py --epc-csv ... --planning-csv ...`, followed by `python3 pipeline/access.py` and `python3 pipeline/shard-community.py`. Optional inputs must be supplied on each rebuild; they are not carried forward automatically. Sources are cached in ignored `raw/`. The default police vintage is pinned to August2026; change `--crime-month YYYY-MM` for a newer verified archive. Other source URLs are intentionally frozen and require a deliberate update.
+
+## October2026 refresh and named search
+
+The committed postcode build now uses official ONSPD August2026, verified source, with archive URL/SHA256 in manifest. Council polygons are May2026 BUC (500m), and council membership uses ONSPD codes directly. Boundaries remain approximations; current official points do not make postcode polygons authoritative. Country border lines retain the disclosed2013 source.
+
+Population and ages use [ONS mid-2024 LSOA estimates](https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates), published7November2025. The supplied XLSX contains35,672 England/Wales LSOAs; sex/age totals are validated against total residents before allocation. Postal estimates still use postcode shares, not dwelling/population weighting; coverage thresholds unchanged. Mean age assumes92.5 for the90+ category. Housing/tenure/crowding remain Census2021. Crime per-resident rates now use this2024 denominator, keeping the date mismatch explicit. Scotland population remains a separate outstanding import.
+
+Broadband coverage now uses [Ofcom Connected Nations Spring2026](https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations-update-spring-2026), January2026 residential postcode files. Still an unweighted postcode mean, not premises-weighted area coverage or experienced speeds. ©Ofcom, publication acknowledged.
+
+Street/place search uses [OS Open Names](https://www.ordnancesurvey.co.uk/products/os-open-names), downloaded via `https://api.os.uk/downloads/v1/products/OpenNames/downloads?area=GB&format=CSV&redirect`. SHA256/MD5, source URL and attribution are in `public/data/search/meta.json`; publisher MD5 was checked. OS OpenData licence / OGL. Contains OS data ©Crown copyright and database rights2026; Royal Mail data ©Royal Mail copyright and database right2026; National Statistics data ©Crown copyright and database right2026. Search source records include English/Welsh/Scots/Gaelic names where supplied, road sections and settlements. Search is name-prefix based with contextual filtering, so add a town for common street names. It supplies GB reference locations, not individual house addresses, postcode service coverage, or road geometries.
+
+Named records are self-hosted in128 gzip buckets, fetched only during named search; no query is sent to an external geocoder. Other postcode searches can still use postcodes.io as documented. The search archive does not load at startup.
+
+Regional stats and optional district details load by postcode area. Production assets are copied into content-addressed releases; those URLs receive immutable caching, while source paths remain revalidated. Source dates remain visible in the metric definitions. Weekly lightweight publisher checks report availability/checksum changes for review, rather than automatically presenting unchecked newer data.

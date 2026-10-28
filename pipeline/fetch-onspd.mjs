@@ -17,13 +17,13 @@ const RAW = path.join(ROOT, 'raw');
 const ARCGIS = 'https://www.arcgis.com/sharing/rest';
 
 async function findLatest() {
-  const q = encodeURIComponent('title:"ONS Postcode Directory"');
+  const q = encodeURIComponent('owner:ONSGeography_data title:"ONS Postcode Directory"');
   const r = await fetch(`${ARCGIS}/search?f=json&num=50&sortField=modified&sortOrder=desc&q=${q}`);
   if (!r.ok) throw new Error(`ArcGIS search failed: HTTP ${r.status}`);
   const { results = [] } = await r.json();
   // Release items are titled like "ONS Postcode Directory (February 2026)" and are zip downloads.
   const releases = results
-    .filter((it) => /^ONS Postcode Directory \((January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\)$/.test(it.title))
+    .filter((it) => /^ONS Postcode Directory \((January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\)(?: for the United Kingdom)?$/.test(it.title))
     .filter((it) => /CSV|Zip|File/i.test(it.type))
     .map((it) => ({ ...it, date: new Date(`1 ${it.title.match(/\((.*)\)/)[1]}`) }))
     .sort((a, b) => b.date - a.date);
@@ -45,9 +45,14 @@ console.log(`Downloaded ${(fs.statSync(zip).size / 1e6).toFixed(0)} MB`);
 
 const entries = execFileSync('unzip', ['-Z1', zip], { maxBuffer: 1 << 26 }).toString().split('\n');
 const csv = entries.find((e) => /ONSPD_[A-Z]{3}_\d{4}_UK\.csv$/i.test(e));
-if (!csv) throw new Error(`No ONSPD_<MON>_<YEAR>_UK.csv in the zip. Entries: ${entries.slice(0, 20).join(', ')}`);
-execFileSync('unzip', ['-o', '-j', zip, csv, '-d', RAW]);
-const out = path.join(RAW, path.basename(csv));
+let out;
+if(csv){execFileSync('unzip',['-o','-j',zip,csv,'-d',RAW]);out=path.join(RAW,path.basename(csv));}
+else {
+ const names=entries.filter(e=>/\/multi_csv\/ONSPD_[A-Z]{3}_\d{4}_UK_.*\.csv$/i.test(e));
+ if(!names.length)throw new Error('Official archive has no UK CSV or multi_csv directory');
+ const release=names[0].match(/ONSPD_[A-Z]{3}_\d{4}/i)[0];const dest=path.join(RAW,release);fs.mkdirSync(dest,{recursive:true});
+ execFileSync('unzip',['-o','-j',zip,...names,'-d',dest],{maxBuffer:1<<26});out=dest;
+}
 console.log(`Extracted ${path.relative(ROOT, out)}`);
 if (process.env.GITHUB_ENV) fs.appendFileSync(process.env.GITHUB_ENV, `ONSPD_CSV=${out}\n`);
 console.log(out);

@@ -2,6 +2,7 @@
 // map can show. Local data is searched first (instant, works offline); for
 // full postcodes outside local detail coverage, postcodes.io is used.
 
+import { normaliseName, searchNamed, type NamedTarget } from './namedSearch';
 import type { PostcodeData } from './data';
 import { autocomplete, lookupPostcode } from './lookup';
 import { areaOf, asSector, cleanQuery, compareCodes, districtOf, normaliseUnit, OUTWARD_RE } from './postcode';
@@ -23,12 +24,15 @@ export type Selection =
       notice?: string;
     };
 
-export interface Suggestion {
+export type SearchTarget = { kind: RegionKind | 'unit'; code: string } | NamedTarget;
+export interface PostcodeSuggestion {
   kind: RegionKind | 'unit';
   code: string;
   title: string;
   subtitle: string;
 }
+
+export type Suggestion = PostcodeSuggestion | NamedTarget;
 
 const MAX = 8;
 
@@ -92,6 +96,10 @@ export async function suggest(query: string, data: PostcodeData, signal?: AbortS
     if (!data.isDetailArea(area) && compact.length > 4) {
       for (const pc of await autocomplete(compact, signal)) add({ kind: 'unit', code: pc, title: pc, subtitle: 'Postcode · via postcodes.io' });
     }
+  }
+  if ((normaliseName(query).length >= 3 && !/^[A-Z]{1,2}[0-9]/.test(compact)) || /^[ABM]\d{1,4}$/.test(compact)) {
+    const named = await searchNamed(query, data.baseUrl, signal).catch((error: Error) => { if (out.length) return []; throw error; });
+    return (/^[ABM]\d{1,4}$/.test(compact) ? [...out,...named] : [...named,...out]).slice(0,MAX);
   }
   return out.slice(0, MAX);
 }
@@ -157,20 +165,20 @@ export async function resolveUnit(postcode: string, data: PostcodeData): Promise
 }
 
 export type QueryResolution =
-  | { ok: true; target: { kind: RegionKind; code: string } | { kind: 'unit'; code: string } }
+  | { ok: true; target: SearchTarget }
   | { ok: false; message: string };
 
 /** Resolves free text (Enter without picking a suggestion). */
 export async function resolveQuery(query: string, data: PostcodeData): Promise<QueryResolution> {
   const q = cleanQuery(query);
-  if (!q) return { ok: false, message: 'Type a postcode, district or area.' };
+  if (!q) return { ok: false, message: 'Type a postcode, place or street name.' };
   const unit = normaliseUnit(q);
   if (unit) return { ok: true, target: { kind: 'unit', code: unit } };
   const compact = q.replace(/ /g, '');
   if (data.areas.has(compact)) return { ok: true, target: { kind: 'area', code: compact } };
   if (data.districts.has(compact) && !q.includes(' ')) return { ok: true, target: { kind: 'district', code: compact } };
-  const s = await suggest(q, data);
-  if (s.length) return { ok: true, target: { kind: s[0].kind, code: s[0].code } };
+  const s = await suggest(query, data);
+  if (s.length) return { ok: true, target: s[0] };
   const sector = asSector(q);
   if (sector && data.districts.has(districtOf(sector))) {
     return data.isDetailArea(areaOf(sector))
@@ -179,5 +187,5 @@ export async function resolveQuery(query: string, data: PostcodeData): Promise<Q
   }
   if (OUTWARD_RE.test(compact)) return { ok: false, message: `There is no postcode district called ${compact}.` };
   if (/^[A-Z]{1,2}$/.test(compact)) return { ok: false, message: `There is no postcode area called ${compact}.` };
-  return { ok: false, message: 'Not a recognised UK postcode format. Try e.g. SY1 1AD, SY1 1, SY1 or SY.' };
+  return { ok: false, message: 'No matching postcode, place or street found. Try adding a town, for example High Street Shrewsbury. Street and place coverage is Great Britain.' };
 }

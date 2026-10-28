@@ -1,0 +1,19 @@
+name: Check data source updates
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 7 * * 1'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/epic-franklin-lv8rwq
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node pipeline/check-updates.mjs

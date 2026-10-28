@@ -1,8 +1,9 @@
 """Mask postal crime measures where a territorial police force has missing months.
 Also stops BTP-only records making Greater Manchester / Scotland look safe.
 """
-import collections,csv,io,json,pathlib,re,zipfile
+import collections,csv,io,json,pathlib,re,zipfile,hashlib
 ROOT=pathlib.Path(__file__).resolve().parent.parent;DATA=ROOT/'public/data';RAW=ROOT/'raw';cache=RAW/'derived/region-police-forces.json';current={re.sub(r'\s','',x) for x in (RAW/'derived/current-postcodes.txt').read_text().splitlines()}
+cache=RAW/'derived'/('region-police-forces-'+hashlib.sha256('\n'.join(sorted(current)).encode()).hexdigest()[:12]+'.json')
 if not cache.exists():
  z=zipfile.ZipFile(RAW/'onspd-geography.zip');n=next(n for n in z.namelist() if '/PFA Police Force' in n and n.endswith('.csv'));names={r['PFA23CD']:r['PFA23NM'] for r in csv.DictReader(io.TextIOWrapper(z.open(n),encoding='utf-8-sig'))};out=collections.defaultdict(set)
  for name in z.namelist():

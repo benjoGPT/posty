@@ -22,7 +22,7 @@ postcode.
 
 - Five zoom-driven levels (areas → districts → sectors → postcodes → close-up), with
   smooth cross-fades and a manual override: **Auto | Areas | Districts | Sectors | Individual**
-- Search for full or partial postcodes, sectors, districts, areas or area names, case-
+- Wider search for GB places and streets, with town/county context and named map pins. Existing search for full or partial postcodes, sectors, districts, areas or area names remains case-
   and space-insensitive, with autocomplete. Clear messages for invalid, unknown,
   terminated and unreachable cases.
 - Click any region or postcode for details: hierarchy, coordinates, positional quality,
@@ -179,3 +179,9 @@ described above.
 - [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md): sources, licences, attribution, limitations
 - [docs/EXPANSION.md](docs/EXPANSION.md): adding regions, a national build, hosting, updates
 - [docs/ACCURACY.md](docs/ACCURACY.md): independent accuracy checks and what they show
+
+## Current data and loading
+
+Official ONSPD August2026, May2026 council geography, ONS mid-2024 population/age, Ofcom January2026 coverage. Census housing remains2021. OS Open Names street/place search covers GB; no house-number addresses. Run `npm run data:names` to rebuild named search. `npm run data:check-updates` performs lightweight publisher checks; a Monday GitHub Action also reports source changes.
+
+Next config runs regional statistics compaction and prepares content-addressed data releases automatically for dev/build. Generated `public/data/releases/` is ignored; do not commit it. Startup is~1.42MB raw JSON, regional statistics and named search load on demand. Use a page refresh after deployment if an older open tab requests a retired release path.

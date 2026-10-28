@@ -178,7 +178,7 @@ const recordCouncil = new Array(pcs.length).fill(null);
 let adminExact = 0, adminLocated = 0;
 for (let i = 0; i < pcs.length; i++) {
   const code = ladList[i];
-  if (code && /^[EWSN]0\d{7}$/.test(code)) { recordCouncil[i] = code; adminExact++; continue; }
+  if (code && /^[EWSN]\d{8}$/.test(code)) { recordCouncil[i] = code; adminExact++; continue; }
   const idx = locateCouncil(lngs[i], lats[i]);
   if (idx >= 0) { recordCouncil[i] = councils[idx].properties.c; adminLocated++; }
 }
@@ -509,7 +509,7 @@ writeJson('manifest.json', {
   },
   admin: {
     method: adminMethod,
-    councils: 'ONS Local Authority Districts (December 2021), ultra-generalised; April 2023 changes in Cumbria, North Yorkshire and Somerset not shown on the map',
+    councils: 'ONS Local Authority Districts (May 2026), ultra-generalised (500 m), coastline clipped',
     borders: 'National borders from ONS Local Authority Districts (2013, generalised)',
     attribution: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data © Crown copyright and database right',
   },

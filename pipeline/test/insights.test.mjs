@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 const insights=JSON.parse(fs.readFileSync('public/data/insights.json','utf8'));
 const index=JSON.parse(fs.readFileSync('public/data/index.json','utf8'));
+for(const f of fs.readdirSync('public/data/region-stats')){const x=JSON.parse(fs.readFileSync('public/data/region-stats/'+f,'utf8'));Object.assign(insights.groups,x.insights);for(const r of index.districts)if(x.details[r.c])Object.assign(r,x.details[r.c]);}
 test('IMD enrichment retains attribution, England-only scale and finite matched samples',()=>{
  assert.equal(insights.schema,1);assert.match(insights.imd.url,/^https:\/\/deprivation\.communities\.gov\.uk\//);assert.match(insights.imd.sha256,/^[a-f0-9]{64}$/);assert.ok(insights.imd.postcodes>500000);
  for(const g of Object.values(insights.groups)){if(g.im!==undefined){assert.ok(g.im>=1&&g.im<=10);assert.ok(Number.isInteger(g.imn)&&g.imn>0)}}

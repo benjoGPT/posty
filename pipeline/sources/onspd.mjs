@@ -89,7 +89,7 @@ export async function load({ input, onRecord }) {
           lad: pickColumn(h, ['oslaua', /^lad\d\dcd$/], false),
           intro: pickColumn(h, ['dointr'], false),
           ruc21: pickColumn(h, ['ruc21ind'], false),
-          ru11: pickColumn(h, ['ru11ind'], false),
+          ru11: pickColumn(h, ['ru11ind', 'ruc11ind'], false),
         };
         continue;
       }
