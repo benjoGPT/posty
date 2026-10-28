@@ -28,7 +28,7 @@ postcode.
 - Click any region or postcode for details: hierarchy, coordinates, positional quality,
   administrative geography, data source and release, copy and share buttons
 - Desktop side panel, mobile draggable bottom sheet
-- **Community data:** grouped heat-map buttons in a left options sidebar (15% on desktop, minimum240px), with the map resizing beside it. Data includes population/age, housing/tenure/crowding, broadband availability, recorded crime and trends, access to services and green space. Each displays its source, period and limits; unavailable values stay grey.
+- **Community data:** grouped heat-map buttons in a resizable left options sidebar (380px default; width remembered) with Data layers, Places and Map settings tabs, layer search and topic shortcuts, with the map resizing beside it. Data includes population/age, housing/tenure/crowding, broadband availability, recorded crime and trends, access to services and green space. Each displays its source, period and limits; unavailable values stay grey.
 - **Compare:** choose two areas, districts or sectors at the same level to compare metrics, prices and deprivation.
 - **Environment:** England river/sea flood overlay at zoom13+; extra supermarkets, pharmacies and green-space markers in detail areas. EPC/planning importers are ready, with availability notices until suitable exports are supplied.
 - **Colour coding**: regions in four colours so neighbours never match, or shaded by postcode density, or outlines only

@@ -1,8 +1,8 @@
 'use client';
 
 import {metricFor,metricStops,type MetricDefinition,type DataAvailability} from '@/lib/metrics';
-import type { ReactNode } from 'react';
-import { APP_CONFIG, type BasemapId } from '@/config/app';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { APP_CONFIG, basemapById, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
 import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type PlaceToggles } from '@/lib/mapLayers';
 import { CloseIcon, InfoIcon } from './Icons';
@@ -50,16 +50,16 @@ const PLACE_TOGGLES: { key: keyof PlaceToggles; icon: string; label: string }[] 
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <fieldset className="border-b border-line px-3 py-4">
+    <fieldset className="border-b border-line px-4 py-4">
       <legend className="mb-2 text-[11px] font-semibold tracking-wider text-faint uppercase">{title}</legend>
       {children}
     </fieldset>
   );
 }
 
-function ColourPreview({ mode }: { mode: ColourMode }) {
+function ColourPreview({ mode, theme = 'light' }: { mode: ColourMode; theme?: 'light' | 'dark' }) {
   const metric=metricFor(mode);
-  const colours = metric ? metricStops(metric,'light').map(([,c])=>c) :
+  const colours = metric ? metricStops(metric,theme).map(([,c])=>c) :
     mode === 'colours' ? REGION_COLOURS.light
     : mode === 'density' ? DENSITY_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
     : mode === 'prices' ? PRICE_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
@@ -76,141 +76,101 @@ function ColourPreview({ mode }: { mode: ColourMode }) {
   );
 }
 
-function MeasureButton({ id, label, selected, onSelect }: { id: ColourMode; label: string; selected: boolean; onSelect: (mode: ColourMode) => void }) {
-  return <button type="button" role="radio" aria-checked={selected} onClick={() => onSelect(id)}
-    className={`flex min-h-11 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] leading-snug ${selected ? 'border-accent bg-accent-soft font-semibold text-accent-text' : 'border-line text-ink hover:border-faint hover:bg-surface-hover'}`}>
-    <span aria-hidden className={`size-3 shrink-0 rounded-full border ${selected ? 'border-accent bg-accent' : 'border-faint'}`} />
-    <span>{label}</span>
-  </button>;
-}
+type PanelTab = 'data' | 'places' | 'settings';
+interface LayerChoice { id: ColourMode; title: string; topic: string; hint: string; search: string }
+const TOPICS = ['Popular', 'All', 'Map appearance', 'People', 'Crime', 'Housing', 'Broadband', 'Transport', 'Services', 'Environment'];
+const POPULAR = ['colours', 'prices', 'deprivation', 'metric:population_density', 'metric:crime_rate', 'metric:gigabit'];
+const SHORT_NAMES: Record<string, string> = { population: 'Population', population_density: 'Population density', mean_age: 'Average age (estimate)', children: 'Children under 15', older: 'Residents aged 65+', crime_rate: 'Crime rate', crime_count: 'Recorded crimes', crime_change: 'Crime trend', gigabit: 'Gigabit broadband', superfast: 'Superfast broadband' };
+const TABS: { id: PanelTab; label: string }[] = [{ id: 'data', label: 'Data layers' }, { id: 'places', label: 'Places' }, { id: 'settings', label: 'Map settings' }];
+const SEARCH_ALIASES: Record<string, string> = { station_distance: 'train railway station', green_distance: 'park parks green space outdoors', gp_distance: 'doctor medical health GP surgery', supermarket_distance: 'shops grocery shopping', pharmacy_distance: 'chemist pharmacy', school_distance: 'school education' };
+const topicOf = (topic: string) => topic === 'Safety' ? 'Crime' : topic === 'Connectivity' ? 'Broadband' : topic;
 
 export function LayersPanel(p: Props) {
+  const prefix = useId();
+  const [tab, setTab] = useState<PanelTab>('data');
+  const [topic, setTopic] = useState('Popular');
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('pc-options-view') ?? '{}');
+      if (TABS.some(t => t.id === saved.tab)) setTab(saved.tab);
+      if (TOPICS.includes(saved.topic)) setTopic(saved.topic);
+    } catch { /* optional preference */ }
+  }, []);
+  function remember(nextTab: PanelTab, nextTopic: string) {
+    try { localStorage.setItem('pc-options-view', JSON.stringify({ tab: nextTab, topic: nextTopic })); } catch { /* optional preference */ }
+  }
+  const available = COLOUR_MODES.filter(m => m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : m.id === 'deprivation' ? p.available.deprivation : m.id === 'growth' ? p.available.growth : true);
+  const choices: LayerChoice[] = [
+    ...available.map(m => ({ id: m.id, title: m.id === 'density' ? 'Postcode density' : m.label, topic: m.id === 'prices' || m.id === 'growth' ? 'Housing' : m.id === 'deprivation' ? 'People' : 'Map appearance', hint: m.id === 'deprivation' ? 'English IMD 2025 · mean decile' : m.id === 'prices' ? 'England and Wales · median sale prices' : m.id === 'growth' ? 'England and Wales · complete-year sale medians' : 'Map appearance', search: `${m.label} ${m.hint}` })),
+    ...(p.metrics ?? []).filter(m => m.status === 'available').map(m => ({ id: `metric:${m.id}` as ColourMode, title: SHORT_NAMES[m.id] ?? m.title, topic: topicOf(m.topic), hint: `${m.period} · ${m.unit}`, search: `${m.title} ${m.id} ${SEARCH_ALIASES[m.id] ?? ''} ${m.topic} ${m.topic === 'People' ? 'population age demographics' : m.topic === 'Safety' ? 'crime safety' : m.topic === 'Connectivity' ? 'broadband internet fibre' : ''}` })),
+  ];
+  const search = query.trim().toLowerCase();
+  const matches = choices.filter(m => search ? `${m.title} ${m.topic} ${m.search}`.toLowerCase().includes(search) : topic === 'All' || topic === 'Popular' && POPULAR.includes(m.id) || m.topic === topic);
+  const groups = topic === 'Popular' && !search ? ['Popular layers'] : TOPICS.slice(2).filter(t => matches.some(m => m.topic === t));
+  const active = metricFor(p.colourMode);
+  const title = active?.title ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.label ?? 'Map colours';
+  const theme = basemapById(p.basemap).theme as 'light' | 'dark';
+
+  function layerRows(rows: LayerChoice[]) {
+    return <div className="space-y-1.5">{rows.map(m => <label key={m.id} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 ${p.colourMode === m.id ? 'border-accent bg-accent-soft' : 'border-line hover:border-faint hover:bg-surface-hover'}`}>
+      <input type="radio" name={`${prefix}-measure`} value={m.id} checked={p.colourMode === m.id} onChange={() => p.onColourMode(m.id)} className="size-4 shrink-0 accent-accent" />
+      <span className="min-w-0"><span className={`block text-[13px] font-medium ${p.colourMode === m.id ? 'text-accent-text' : 'text-ink'}`}>{m.title}</span><span className="mt-0.5 block text-[11px] leading-snug text-muted">{m.hint}</span></span>
+    </label>)}</div>;
+  }
+
   return (
-    <div className="text-ink">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-4 py-2.5">
-        <h2 className="text-[14px] font-semibold">Map options</h2>
-        <button onClick={p.onClose} aria-label="Close map options" className="grid size-11 md:size-8 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
-          <CloseIcon />
-        </button>
+    <div className="flex h-full min-h-0 w-full flex-col text-ink">
+      <header className="shrink-0 border-b border-line bg-surface px-4 pt-3">
+        <div className="flex items-center justify-between gap-3">
+          <div><h2 className="text-[16px] font-semibold">Map options</h2><p className="mt-0.5 text-[12px] text-muted">Choose what the map shows.</p></div>
+          <button type="button" onClick={p.onClose} aria-label="Close map options" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-hover"><CloseIcon /></button>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1" role="tablist" aria-label="Map option sections" onKeyDown={e => {
+          const index = TABS.findIndex(t => t.id === tab);
+          const next = e.key === 'ArrowRight' ? (index + 1) % TABS.length : e.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : -1;
+          if (next < 0) return; e.preventDefault(); setTab(TABS[next].id); remember(TABS[next].id, topic); (e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]).focus();
+        }}>
+          {TABS.map(t => <button key={t.id} type="button" id={`${prefix}-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls={`${prefix}-panel`} tabIndex={tab === t.id ? 0 : -1} onClick={() => { setTab(t.id); remember(t.id, topic); }} className={`min-h-11 border-b-2 px-1 text-[12px] font-semibold ${tab === t.id ? 'border-accent text-accent-text' : 'border-transparent text-muted hover:bg-surface-hover hover:text-ink'}`}>{t.label}</button>)}
+        </div>
+      </header>
+
+      <div id={`${prefix}-panel`} role="tabpanel" aria-labelledby={`${prefix}-${tab}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {tab === 'data' && <>
+          <div className="sticky top-0 z-10 border-b border-line bg-surface px-4 py-3">
+            <label htmlFor={`${prefix}-search`} className="sr-only">Find a data layer</label>
+            <div className="relative"><input id={`${prefix}-search`} type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search data layers…" className="h-11 w-full rounded-lg border border-line bg-surface-2 px-3 pr-16 text-[13px] outline-none focus:border-accent focus:ring-1 focus:ring-accent" />{query && <button type="button" onClick={() => setQuery('')} className="absolute top-0 right-1 h-11 px-2 text-[12px] text-accent-text">Clear</button>}</div>
+            <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Layer topics">{TOPICS.filter(t => t === 'Popular' || t === 'All' || choices.some(m => m.topic === t)).map(t => <button key={t} type="button" aria-pressed={!search && topic === t} onClick={() => { setTopic(t); setQuery(''); remember(tab, t); }} className={`min-h-8 rounded-md border px-2.5 py-1 text-[11.5px] font-medium ${!search && topic === t ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-muted hover:bg-surface-hover hover:text-ink'}`}>{t}</button>)}</div>
+          </div>
+          <p role="status" className="px-4 pt-3 text-[11px] text-muted">{matches.length} {matches.length === 1 ? 'layer' : 'layers'}{search ? ` matching “${query.trim()}”` : ''} · choose one to colour the map</p>
+          {groups.map(group => <Group key={group} title={group}>{layerRows(group === 'Popular layers' ? matches : matches.filter(m => m.topic === group))}</Group>)}
+          {!matches.length && <div className="px-4 py-8 text-[13px] text-muted"><p>No layers found. Try crime, population or broadband.</p><button type="button" onClick={() => { setQuery(''); setTopic('All'); remember(tab, 'All'); }} className="mt-3 rounded-lg border border-line px-3 py-2 text-accent-text">Show all layers</button></div>}
+        </>}
+
+        {tab === 'places' && <>
+          <p className="px-4 pt-4 text-[12px] leading-relaxed text-muted">Show nearby places in SY, TF, WV and DY. Zoom in to see markers. These toggles can be combined.</p>
+          {(['Transport', 'Everyday services', 'Community and green space'] as const).map(group => <Group key={group} title={group}><div className="space-y-1">{PLACE_TOGGLES.filter(t => group === 'Transport' ? ['stations', 'stops'].includes(t.key) : group === 'Everyday services' ? ['supermarkets', 'pharmacies', 'gps'].includes(t.key) : ['parks', 'schools', 'postboxes'].includes(t.key)).map(({ key, icon, label }) => <label key={key} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-hover"><span className="size-3 rounded-full" style={{ background: PLACE_STYLE[icon].colour }} aria-hidden /><span className="flex-1 text-[13px] font-medium">{label}</span><input type="checkbox" checked={p.places[key]} onChange={e => p.onPlaces({ ...p.places, [key]: e.target.checked })} className="size-4 accent-accent" /></label>)}</div></Group>)}
+          <p className="px-4 py-4 text-[11.5px] leading-relaxed text-muted">Overture Maps and OpenStreetMap listings can be incomplete. Green-space points are mapped centres, not entrances or guarantees of public access.</p>
+        </>}
+
+        {tab === 'settings' && <>
+          <Group title="Map style"><div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Map style">{APP_CONFIG.basemaps.map(b => <button key={b.id} type="button" role="radio" aria-checked={p.basemap === b.id} onClick={() => p.onBasemap(b.id)} className={`rounded-lg border p-2 text-[12px] ${p.basemap === b.id ? 'border-accent bg-accent-soft font-semibold text-accent-text' : 'border-line hover:bg-surface-hover'}`}><span className="mb-2 block h-8 rounded" style={{ background: `linear-gradient(135deg, ${b.swatch[0]} 55%, ${b.swatch[1]} 55%)` }} aria-hidden />{b.label}</button>)}</div></Group>
+          <Group title="Boundaries and flood risk"><div className="space-y-2">{([
+            ['countries', 'Country borders', 'England, Wales and Scotland'], ['councils', 'Council boundaries', 'Local authority boundaries and names'], ['flood', 'River and sea flood risk', 'Environment Agency · England · zoom 13+'],
+          ] as const).map(([key, label, hint]) => <label key={key} className="flex min-h-14 cursor-pointer items-center gap-3 rounded-lg px-1 py-2 hover:bg-surface-hover"><span className="flex-1"><span className="block text-[13px] font-medium">{label}</span><span className="mt-0.5 block text-[11px] text-muted">{hint}</span></span><input type="checkbox" role="switch" checked={!!p.borders[key]} onChange={e => p.onBorders({ ...p.borders, [key]: e.target.checked })} className="size-4 shrink-0 accent-accent" /></label>)}</div><p className="mt-2 text-[11.5px] leading-relaxed text-muted">Flood data covers rivers and sea in England, excluding surface water. An uncoloured area does not prove no risk.</p></Group>
+          {p.showDetail && <Group title="Postcode detail"><div className="flex flex-wrap gap-2">{(['auto', ...LEVELS] as DetailMode[]).map(m => <button key={m} type="button" aria-pressed={p.mode === m} onClick={() => p.onMode(m)} className={`min-h-10 rounded-lg border px-3 text-[12px] ${p.mode === m ? 'border-accent bg-accent-soft text-accent-text' : 'border-line hover:bg-surface-hover'}`}>{m === 'auto' ? 'Auto' : LEVEL_LABELS[m].short}</button>)}</div><p className="mt-2 text-[11.5px] text-muted">Auto changes detail as you zoom.</p></Group>}
+          {!!p.availability?.length && <Group title="Data coverage"><div className="space-y-3">{p.availability.map(d => <details key={d.id} className="text-[12px] text-muted"><summary className="cursor-pointer font-medium text-ink">{d.title} · unavailable</summary><p className="mt-2 leading-relaxed">{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Official service</a></p></details>)}</div></Group>}
+          <button type="button" onClick={p.onAbout} className="m-4 flex min-h-11 items-center gap-2 text-[13px] font-medium text-accent-text"><InfoIcon width={16} height={16} />About the data and accuracy</button>
+        </>}
       </div>
 
-      <Group title="Map style">
-        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Map style">
-          {APP_CONFIG.basemaps.map((b) => {
-            const on = b.id === p.basemap;
-            return (
-              <button key={b.id} role="radio" aria-checked={on} onClick={() => p.onBasemap(b.id)} className="group flex min-h-11 flex-col items-center gap-1.5">
-                <span
-                  className={`block h-7 w-full rounded-lg border-2 transition-colors ${on ? 'border-accent' : 'border-line group-hover:border-faint'}`}
-                  style={{ background: `linear-gradient(135deg, ${b.swatch[0]} 55%, ${b.swatch[1]} 55%)` }}
-                />
-                <span className={`text-[11.5px] ${on ? 'font-semibold text-accent-text' : 'text-muted'}`}>{b.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Group>
-
-      <Group title="Colour regions by">
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Colour regions by">
-          {COLOUR_MODES.filter(m => m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : m.id === 'deprivation' ? p.available.deprivation : m.id === 'growth' ? p.available.growth : true).map(m => (
-            <MeasureButton key={m.id} id={m.id} label={m.id === 'density' ? 'Postcode density' : m.label} selected={p.colourMode === m.id} onSelect={p.onColourMode} />
-          ))}
-        </div>
-      </Group>
-
-      <Group title="Selected measure">
-        <p className="mb-2 text-[12px] font-semibold">{metricFor(p.colourMode)?.title ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.label}</p>
-        <ColourPreview mode={p.colourMode} />
-        <details className="mt-2 text-[11.5px] leading-snug text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-1">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.hint}</p></details>
-        {metricFor(p.colourMode) && <p className="mt-2 text-[11px] text-muted">{metricFor(p.colourMode)?.period} · <a className="text-accent-text underline" href={metricFor(p.colourMode)?.source} target="_blank" rel="noreferrer">Data source</a></p>}
-      </Group>
-      {['People', 'Safety', 'Housing', 'Connectivity', 'Transport', 'Services', 'Environment'].map(topic => {
-        const metrics = (p.metrics ?? []).filter(m => m.topic === topic && m.status === 'available');
-        if (!metrics.length) return null;
-        return <Group key={topic} title={topic}>
-          <div className="grid grid-cols-1 gap-1.5" role="radiogroup" aria-label={topic}>
-            {metrics.map(m => <MeasureButton key={m.id} id={`metric:${m.id}`} label={m.title} selected={p.colourMode === `metric:${m.id}`} onSelect={p.onColourMode} />)}
-          </div>
-        </Group>;
-      })}
-
-      <Group title="Show on the map">
-        <div className="flex flex-wrap gap-1.5">
-          {PLACE_TOGGLES.map(({ key, icon, label }) => {
-            const on = p.places[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={on}
-                onClick={() => p.onPlaces({ ...p.places, [key]: !on })}
-                className={`flex h-9 items-center gap-1.5 rounded-full border pr-3 pl-1.5 text-[12.5px] font-medium transition-colors ${on ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-ink hover:bg-surface-hover'}`}
-              >
-                <span className="size-5 rounded-full border-2 border-surface" style={{ background: PLACE_STYLE[icon].colour, opacity: on ? 1 : 0.55 }} aria-hidden />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Zoom in to see them. From Overture Maps and OpenStreetMap via Overpass; detail areas only.</p>
-      </Group>
-
-      <Group title="Boundaries and flood overlay">
-        <div className="space-y-1">
-          {([
-            ['flood', 'River and sea flood risk', 'Environment Agency, England only; zoom 13+'],
-            ['countries', 'Country borders', 'England, Wales and Scotland'],
-            ['councils', 'Council boundaries', 'Local authorities, with names'],
-          ] as const).map(([key, label, hint]) => (
-            <label key={key} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-1 py-1.5 hover:bg-surface-hover">
-              <span>
-                <span className="block text-[13px] font-medium text-ink">{label}</span>
-                <span className="block text-[11.5px] text-muted">{hint}</span>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={p.borders[key]}
-                onChange={(e) => p.onBorders({ ...p.borders, [key]: e.target.checked })}
-                className="peer sr-only"
-              />
-              <span aria-hidden className="relative h-6 w-10 shrink-0 rounded-full bg-line transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-4" />
-            </label>
-          ))}
-        </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Postcode areas do not follow council borders. Flood overlay: river/sea risk in England only, no surface-water layer; absence of colour does not prove no risk.</p>
-      </Group>
-
-      {!!p.availability?.length && <Group title="Data availability"><details><summary className="cursor-pointer text-[12px] text-muted">Sources awaiting access or coverage</summary><ul className="mt-2 space-y-3">{p.availability.map(d=><li key={d.id} className="text-[11.5px] text-muted"><strong className="block text-ink">{d.title}</strong>{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Source / official service</a></li>)}</ul></details></Group>}
-
-      {p.showDetail && (
-        <Group title="Detail level">
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Postcode detail level">
-            {(['auto', ...LEVELS] as DetailMode[]).map((m) => {
-              const on = m === p.mode;
-              return (
-                <button
-                  key={m}
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => p.onMode(m)}
-                  className={`h-9 rounded-lg border px-3 text-[13px] font-medium ${on ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-ink hover:bg-surface-hover'}`}
-                >
-                  {m === 'auto' ? 'Auto' : LEVEL_LABELS[m].short}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11.5px] leading-snug text-muted">Auto changes detail as you zoom.</p>
-        </Group>
-      )}
-
-      <div className="border-t border-line px-4 py-3">
-        <button onClick={p.onAbout} className="flex items-center gap-2 text-[13px] font-medium text-accent-text">
-          <InfoIcon width={16} height={16} /> About the data and accuracy
-        </button>
-      </div>
+      <footer className="max-h-[38%] shrink-0 overflow-y-auto border-t border-line bg-surface-2 px-4 py-3">
+        <p className="text-[10px] font-semibold tracking-wider text-faint uppercase">Active colour layer</p>
+        <h3 className="mt-1 text-[13px] font-semibold">{title}</h3>
+        <div className="mt-2"><ColourPreview mode={p.colourMode} theme={theme} /></div>
+        <p className="mt-2 text-[11px] text-muted">{active ? `${active.period} · ${active.unit}` : 'One colour layer at a time. Place markers can be combined.'}</p>
+        <details className="mt-2 text-[11px] leading-relaxed text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-2">{active?.note ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.hint}{active && <> <a href={active.source} target="_blank" rel="noreferrer" className="text-accent-text underline">Source</a></>}</p></details>
+      </footer>
     </div>
   );
 }

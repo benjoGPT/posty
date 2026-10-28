@@ -15,6 +15,7 @@ import { AboutDialog } from './AboutDialog';
 import { DetailsContent } from './DetailsPanel';
 import { AlertIcon, CheckIcon, CloseIcon } from './Icons';
 import { LayersPanel } from './LayersPanel';
+import { OptionsSidebar } from './OptionsSidebar';
 import { MapHover, type MapHoverHandle } from './MapHover';
 import { ColourKey } from './ColourKey';
 import { Legend } from './Legend';
@@ -388,7 +389,7 @@ export default function Explorer() {
       metrics={data?.community?.metrics} availability={data?.community?.availability}
       available={{ prices: !!data?.manifest.prices, urban: !!data?.manifest.extras?.urbanRural, deprivation: !!data?.insights, growth: !!data?.insights && Object.values(data.insights.groups).some(g=>g.pg!==undefined) }}
       mode={mode}
-      showDetail={isMobile}
+      showDetail
       onBasemap={changeBasemap}
       onColourMode={changeColourMode}
       onMode={changeMode}
@@ -402,9 +403,7 @@ export default function Explorer() {
   return (
     <main className="fixed inset-0 flex overflow-hidden">
       {layersOpen && !isMobile && (
-        <aside aria-label="Map options" className="relative z-30 h-full w-[max(240px,15%)] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-surface">
-          {layers}
-        </aside>
+        <OptionsSidebar onClose={() => setLayersOpen(false)}>{layers}</OptionsSidebar>
       )}
       <div className="relative h-full min-w-0 flex-1" aria-label="Map workspace">
       {data&&compareOpen&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}}/>}
@@ -466,7 +465,7 @@ export default function Explorer() {
           </div>
         )}
 
-        {!quizOpen && !layersOpen && !(isMobile && panel) && (
+        {!quizOpen && !(isMobile && (panel || layersOpen)) && (
           <div className={`absolute ${isMobile ? 'top-[124px] right-3' : `top-3 ${selection && panel ? 'right-[392px]' : 'right-3'}`}`}>
             <ColourKey colourMode={prefs.colourMode} theme={theme} priceScale={data?.manifest.prices?.stops} growthPeriod={data?.insights?.growth} />
           </div>
@@ -501,7 +500,7 @@ export default function Explorer() {
           : <SidePanel label="Postcode details">{panel}</SidePanel>)}
 
         {layersOpen && isMobile && (
-          <BottomSheet label="Map options" onClose={() => setLayersOpen(false)} resetKey="layers" startExpanded>{layers}</BottomSheet>
+          <BottomSheet label="Map options" onClose={() => setLayersOpen(false)} resetKey="layers" startExpanded><div className="h-[75dvh]">{layers}</div></BottomSheet>
         )}
 
         {toast && (
