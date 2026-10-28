@@ -1,7 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+const DataDashboard=dynamic(()=>import('./DataDashboard').then(m=>m.DataDashboard));
 const CrimeExplorer=dynamic(()=>import('./CrimeExplorer').then(m=>m.CrimeExplorer));
+import {OVERLAY_COLOURS,type MetricOverlay} from '@/lib/mapOverlays';
+import {metricFor} from '@/lib/metrics';
 import type {CrimeRecord} from '@/lib/crime';
 import type {NamedTarget} from '@/lib/namedSearch';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -11,7 +14,7 @@ import type { DetailMode } from '@/lib/levels';
 import { reverseGeocode } from '@/lib/lookup';
 import type { MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
 import type { BorderOptions, ColourMode, PlaceToggles, Theme } from '@/lib/mapLayers';
-import { areaOf } from '@/lib/postcode';
+import { areaOf,districtOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
 import { readUrlState, writeUrlState } from '@/lib/url';
 import {CompareAreas,type ComparedArea} from './CompareAreas';
@@ -39,8 +42,9 @@ function useIsMobile() {
 }
 
 // Per-viewer conveniences kept in localStorage (all optional).
-interface Prefs { basemap: BasemapId; colourMode: ColourMode; borders: BorderOptions; places: PlaceToggles; recent: NavTarget[] }
+interface Prefs { overlays?:MetricOverlay[];basemap: BasemapId; colourMode: ColourMode; borders: BorderOptions; places: PlaceToggles; recent: NavTarget[] }
 const DEFAULT_PREFS: Prefs = {
+  overlays:[],
   basemap: 'light',
   colourMode: 'colours',
   borders: { countries: true, councils: false },
@@ -58,6 +62,7 @@ function loadPrefs(): Prefs {
       basemap: basemapById(raw.basemap ?? (legacyDark ? 'dark' : 'light')).id,
       borders: { ...DEFAULT_PREFS.borders, ...raw.borders },
       places: { ...DEFAULT_PREFS.places, ...raw.places },
+      overlays:Array.isArray(raw.overlays)?raw.overlays.filter(o=>o&&typeof o.id==='string'&&Number.isFinite(o.opacity)).slice(0,2):[],
       recent: Array.isArray(raw.recent) ? raw.recent.slice(0, 6) : [],
     };
   } catch {
@@ -98,6 +103,9 @@ export default function Explorer() {
   const [fatal, setFatal] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const theme = basemapById(prefs.basemap).theme as Theme;
+  const [fullMenu,setFullMenu]=useState(false);
+  const [dashboardOpen,setDashboardOpen]=useState(false);
+  const [crimeCount,setCrimeCount]=useState(0);
   const [layersOpen, setLayersOpen] = useState(false);
   const [named,setNamed]=useState<NamedTarget|null>(null);
   const [optionsTab,setOptionsTab]=useState('data');
@@ -130,6 +138,8 @@ export default function Explorer() {
     });
   }, []);
 
+  useEffect(()=>{if(data)ctrl.current?.setMetricOverlays(prefs.overlays??[]);},[data,prefs.overlays]);
+  useEffect(()=>{if(!layersOpen)setFullMenu(false);},[layersOpen]);
   const showToast = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => setToast({ text, tone }), []);
   useEffect(() => {
     if (!toast) return;
@@ -271,9 +281,10 @@ export default function Explorer() {
   // Keyboard shortcuts: "/" focuses search, Escape closes the panel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.closest('input, textarea, dialog');
+      const typing = (e.target as HTMLElement)?.closest('input, textarea, select, dialog');
       if (e.key === '/' && !typing) { e.preventDefault(); search.current?.focus(); }
       if (e.key === 'Escape' && !typing) {
+        setDashboardOpen(false);setFullMenu(false);
         setLayersOpen(false);
         if (quizRef.current) setQuizOpen(false);
         if (selectionRef.current) select(null);
@@ -359,7 +370,7 @@ export default function Explorer() {
   };
 
   const getCrimeCentre=useCallback(():[number,number]=>{const c=ctrl.current?.map.getCenter();return c?[c.lng,c.lat]:[-2.75,52.707];},[]);
-  const showCrimeRecords=useCallback((records:CrimeRecord[])=>{ctrl.current?.setCrimeRecords(records);},[]);
+  const showCrimeRecords=useCallback((records:CrimeRecord[])=>{ctrl.current?.setCrimeRecords(records);setCrimeCount(records.length);},[]);
   const locateCrime=useCallback((record:CrimeRecord)=>{ctrl.current?.focusCrime(record);},[]);
   const openCrime=()=>{setCrimeRequest(n=>n+1);setLayersOpen(true);};
 
@@ -405,11 +416,15 @@ export default function Explorer() {
       }}
     />
   );
+  const crimePanel=data?<CrimeExplorer data={data} selection={selection} named={named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={r=>{setDashboardOpen(false);locateCrime(r);}}/>:<p className="p-4 text-[12px] text-muted">The map is loading…</p>;
+  const openDashboard=()=>{setLayersOpen(false);setDashboardOpen(true);};
   const layers = (
     <LayersPanel
+      fullScreen={fullMenu} onFullScreen={()=>setFullMenu(v=>!v)} onDashboard={openDashboard}
+      overlays={prefs.overlays??[]} onOverlays={overlays=>updatePrefs({overlays})}
       crimeRequest={crimeRequest}
       onTabChange={setOptionsTab}
-      crime={data?<CrimeExplorer data={data} selection={selection} named={named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={locateCrime}/>:<p className="p-4 text-[12px] text-muted">The map is loading…</p>}
+      crime={crimePanel}
       basemap={prefs.basemap}
       colourMode={prefs.colourMode}
       borders={prefs.borders}
@@ -432,12 +447,16 @@ export default function Explorer() {
 
   return (
     <main className="fixed inset-0 flex overflow-hidden">
-      {layersOpen && !isMobile && (
-        <OptionsSidebar onClose={() => setLayersOpen(false)}>{layers}</OptionsSidebar>
+      {data&&compareOpen&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}} onChange={setCompared}/>}
+      {data&&dashboardOpen&&<DataDashboard data={data} initialArea={selection?areaOf(selection.code):undefined} initialCode={selection?.kind==='unit'?districtOf(selection.code):selection?.code} crime={crimePanel} onClose={()=>setDashboardOpen(false)} onMap={(code,kind)=>{setDashboardOpen(false);void navigate({kind:kind as 'area'|'district'|'sector',code});}} onCompare={areas=>{setCompared(areas);setCompareOpen(true);}}/>}
+      {layersOpen && (!isMobile||fullMenu) && (
+        <OptionsSidebar fullScreen={fullMenu} onClose={() => setLayersOpen(false)}>{layers}</OptionsSidebar>
       )}
-      <div className="relative h-full min-w-0 flex-1" aria-label="Map workspace">
-      {data&&compareOpen&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}}/>}
-      {!!compared.length&&<button onClick={()=>setCompareOpen(true)} className="absolute left-3 top-[124px] z-30 rounded-xl border border-line bg-surface px-3 py-2 text-[12px] text-ink shadow-float">Compare ({compared.length}/2)</button>}
+      <div className="relative h-full min-w-0 flex-1" aria-label="Map workspace" inert={dashboardOpen||fullMenu&&layersOpen} aria-hidden={dashboardOpen||fullMenu&&layersOpen?true:undefined}>
+
+      {!!compared.length&&<button onClick={()=>setCompareOpen(true)} className="absolute left-3 top-[166px] z-30 rounded-xl border border-line bg-surface px-3 py-2 text-[12px] text-ink shadow-float">Compare ({compared.length}/2)</button>}
+      {data&&!quizOpen&&<button type="button" onClick={openDashboard} className="absolute left-3 top-[124px] z-30 min-h-9 rounded-lg border border-line bg-surface px-3 text-[12px] font-medium text-accent-text shadow-float">Data dashboard</button>}
+      {(prefs.overlays?.length||crimeCount>0)&&<div className="absolute bottom-4 left-1/2 z-20 max-w-[min(90%,450px)] -translate-x-1/2 rounded-lg border border-line bg-surface p-2 text-[10px] text-muted shadow-float" aria-label="Additional map layers">{prefs.overlays?.map((o,i)=><p key={o.id} className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{background:OVERLAY_COLOURS[i]}}/>{metricFor('metric:'+o.id)?.title} · larger bubble = higher</p>)}{crimeCount>0&&<p>{crimeCount.toLocaleString()} crime/ASB records on map <button className="ml-1 underline" onClick={()=>showCrimeRecords([])}>Clear pins</button></p>}</div>}
       {/* MapLibre styles its container as position: relative, so it gets its own full-size element. */}
       <div className="absolute inset-0">
         <div ref={mapEl} className="h-full w-full" role="application" aria-label="Postcode map. Use arrow keys to pan and plus or minus to zoom." />
@@ -529,7 +548,7 @@ export default function Explorer() {
           ? <BottomSheet label="Postcode details" onClose={() => select(null)} resetKey={`${selection!.kind}:${selection!.code}`}>{panel}</BottomSheet>
           : <SidePanel label="Postcode details">{panel}</SidePanel>)}
 
-        {layersOpen && isMobile && (
+        {layersOpen && isMobile && !fullMenu && (
           <BottomSheet label="Map options" onClose={() => setLayersOpen(false)} resetKey="layers" startExpanded><div className="h-[75dvh]">{layers}</div></BottomSheet>
         )}
 

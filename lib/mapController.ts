@@ -11,6 +11,8 @@ import {
   applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, setPriceScale, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
   PLACE_STYLE, PLACES_SOURCE, type BorderOptions, type ColourMode, type PlaceToggles, type RegionLevel, type Theme,
 } from './mapLayers';
+import {metricFor} from './metrics';
+import {metricOverlayLayer,type MetricOverlay} from './mapOverlays';
 import {crimeLabel,monthLabel,type CrimeRecord} from './crime';
 import type { NamedTarget } from './namedSearch';
 import { areaOf, districtOf } from './postcode';
@@ -95,6 +97,7 @@ export class MapController {
   private selection: Selection | null = null;
   private marker: maplibregl.Marker | null = null;
   private crimeMarker: maplibregl.Marker | null = null;
+  private metricOverlays:MetricOverlay[]=[];
   private crimeRecords: CrimeRecord[] = [];
   private searchMarker: maplibregl.Marker | null = null;
   private meMarker: maplibregl.Marker | null = null;
@@ -209,6 +212,7 @@ export class MapController {
     this.render();
     this.applySelection();
     this.renderCrimes();
+    this.renderMetricOverlays();
     void this.refresh();
   }
 
@@ -261,6 +265,18 @@ export class MapController {
     this.crimeMarker=new maplibregl.Marker({color:'#b45309'}).setLngLat([Number(record.location.longitude),Number(record.location.latitude)]).setPopup(new maplibregl.Popup({offset:25}).setDOMContent(label)).addTo(this.map);
     this.map.flyTo({center:[Number(record.location.longitude),Number(record.location.latitude)],zoom:16,padding:{top:120,left:40,right:40,bottom:100},duration:reducedMotion()?0:650});
     this.crimeMarker.togglePopup();
+  }
+
+  setMetricOverlays(overlays:MetricOverlay[]):void {
+    this.metricOverlays=overlays.filter(o=>metricFor('metric:'+o.id)).slice(0,2);
+    if(!this.map.getLayer('units-circle'))return;
+    for(let i=0;i<2;i++)for(const level of REGION_LEVELS){const id=`metric-overlay-${i}-${level}`;if(this.map.getLayer(id))this.map.removeLayer(id);}
+    this.renderMetricOverlays();
+  }
+  private renderMetricOverlays():void {
+    if(!this.map.getLayer('units-circle'))return;
+    const level=this.level==='units'?'sectors':this.level;
+    this.metricOverlays.forEach((overlay,i)=>{const metric=metricFor('metric:'+overlay.id);if(!metric)return;for(const l of REGION_LEVELS){const id=`metric-overlay-${i}-${l}`;if(!this.map.getLayer(id))this.map.addLayer(metricOverlayLayer(id,SOURCE[l],metric,i,overlay.opacity));this.map.setLayoutProperty(id,'visibility',l===level?'visible':'none');}});
   }
 
   setColourMode(mode: ColourMode): void {
@@ -352,6 +368,7 @@ export class MapController {
   private updateLevel(): void {
     const mode = this.opts.mode;
     this.level = mode === 'auto' ? levelForZoom(this.map.getZoom(), this.thresholds, this.level) : mode;
+    this.renderMetricOverlays();
     this.emit({ level: this.level, notice: this.notice() });
   }
 

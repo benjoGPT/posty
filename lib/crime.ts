@@ -91,3 +91,21 @@ export async function selectedCrimeScope(data:PostcodeData,selection:Selection|n
   if(km2>500)return {label:`Within 1 mile of ${code} centre`,centre:middle,code,largeRegion:true};
   return {label:`${code} · approximate postcode boundary`,centre:middle,code,boundary:f as Feature<Polygon|MultiPolygon>,box};
 }
+
+export interface CrimePeriodResult {records:CrimeRecord[];loaded:string[];failed:{month:string;message:string}[]}
+export function periodMonths(available:string[],mode:string,value:string,end?:string):{months:string[];label:string;expected:number}{
+ const ordered=[...available].sort();let months:string[]=[],expected=1,label='';
+ if(mode==='year'){months=ordered.filter(m=>m.startsWith(value+'-'));expected=12;label=`${value}${months.length<12?' · available months only':''}`;}
+ else if(mode==='rolling'){months=ordered.slice(-12);expected=12;label='Latest 12 published months';}
+ else if(mode==='range'){if(!end||value>end)throw new Error('The end month must follow the start month.');const startIndex=Number(value.slice(0,4))*12+Number(value.slice(5)),endIndex=Number(end.slice(0,4))*12+Number(end.slice(5));expected=endIndex-startIndex+1;if(expected>12)throw new Error('Choose up to 12 months at a time.');months=ordered.filter(m=>m>=value&&m<=end);label=`${monthLabel(value)} to ${monthLabel(end)}`;}
+ else{months=ordered.filter(m=>m===value);label=monthLabel(value);}
+ if(!months.length)throw new Error('No published months are available for this period.');return {months,label,expected};
+}
+export async function crimePeriod(scope:CrimeScope,months:string[],signal?:AbortSignal,onProgress?:(complete:number,total:number)=>void):Promise<CrimePeriodResult>{
+ if(months.length<1||months.length>12)throw new Error('Choose between 1 and 12 months.');
+ const result:CrimePeriodResult={records:[],loaded:[],failed:[]};let index=0,done=0;
+ async function worker(){while(index<months.length){if(signal?.aborted)throw new DOMException('Cancelled','AbortError');const month=months[index++];try{const records=await crimeRecords(scope,month,signal);result.records.push(...records);result.loaded.push(month);}catch(e){if(signal?.aborted)throw e;result.failed.push({month,message:(e as Error).message});}onProgress?.(++done,months.length);}}
+ await Promise.all([worker(),worker()]);
+ const unique=new Map<string,CrimeRecord>();for(const r of result.records){const key=r.persistent_id||`${r.month}:${r.id}`;const old=unique.get(key);if(!old||(r.outcome_status?.date??'')>(old.outcome_status?.date??''))unique.set(key,r);}
+ result.records=[...unique.values()].sort((a,b)=>b.month.localeCompare(a.month)||a.category.localeCompare(b.category)||a.id-b.id);result.loaded.sort();result.failed.sort((a,b)=>a.month.localeCompare(b.month));return result;
+}

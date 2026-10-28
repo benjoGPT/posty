@@ -202,7 +202,7 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
         </a>
       </Section>
 
-      {places && <Nearby places={places} onShow={onShowPlace} />}
+      {places && <Nearby places={places} onShow={onShowPlace} origin={sel} />}
 
       {onCrime&&<div className="border-t border-line px-4 py-3"><button type="button" onClick={onCrime} className="min-h-10 w-full rounded-lg border border-accent bg-accent-soft px-3 text-left text-[12px] font-semibold text-accent-text">Explore published crime records →</button></div>}
       <CommunityStats data={data} code={districtOf(sel.code)} context onCrime={onCrime}/>

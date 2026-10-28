@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import {useState,type ReactNode} from 'react';
+import {directionsUrl,type TravelMode} from '@/lib/directions';
 import type { NearbyPlace, PlaceKind, PriceSummary } from '@/lib/data';
 import type { LivePostcode } from '@/lib/lookup';
 import { PLACE_STYLE } from '@/lib/mapLayers';
@@ -130,7 +131,8 @@ const NEARBY_ORDER: { kind: PlaceKind; title: string }[] = [
 ];
 
 /** Nearest postbox, station, bus stop, schools and GP surgery. */
-export function Nearby({ places, onShow }: { places: Record<PlaceKind, NearbyPlace[]>; onShow: (p: NearbyPlace) => void }) {
+export function Nearby({ places, onShow,origin }: { places: Record<PlaceKind, NearbyPlace[]>; onShow: (p: NearbyPlace) => void;origin:{code:string;lng:number;lat:number} }) {
+  const [selected,setSelected]=useState<NearbyPlace|null>(null);const [travelMode,setTravelMode]=useState<TravelMode>('walking');
   const items: NearbyPlace[] = [];
   for (const { kind } of NEARBY_ORDER) {
     const list = places[kind];
@@ -150,7 +152,7 @@ export function Nearby({ places, onShow }: { places: Record<PlaceKind, NearbyPla
       <ul className="-mx-1 space-y-0.5">
         {items.map((p) => (
           <li key={`${p.kind}-${p.lng}-${p.lat}`}>
-            <button onClick={() => onShow(p)} className="flex w-full items-start gap-2.5 rounded-lg px-1 py-1.5 text-left hover:bg-surface-hover">
+            <button onClick={() => {setSelected(p);onShow(p);}} className="flex w-full items-start gap-2.5 rounded-lg px-1 py-1.5 text-left hover:bg-surface-hover">
               <span className="mt-0.5 size-4 shrink-0 rounded-full border-2 border-surface" style={{ background: PLACE_STYLE[icon(p)]?.colour }} aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block text-[11.5px] text-muted">
@@ -169,6 +171,7 @@ export function Nearby({ places, onShow }: { places: Record<PlaceKind, NearbyPla
           </li>
         ))}
       </ul>
+      {selected&&<div className="mt-3 rounded-xl border border-accent bg-accent-soft p-3" aria-label="Nearby place directions"><div className="flex justify-between gap-3"><h4 className="text-[13px] font-semibold text-ink">{selected.name??PLACE_STYLE[icon(selected)]?.label}</h4><button type="button" aria-label="Close directions" onClick={()=>setSelected(null)} className="text-[11px] text-accent-text">Close</button></div><p className="mt-1 text-[12px] text-muted">{metres(selected.metres)} straight-line from {origin.code}</p><div className="mt-3 flex flex-wrap gap-1" aria-label="Travel mode">{(['walking','bicycling','driving','transit'] as TravelMode[]).map(m=><button key={m} type="button" aria-pressed={travelMode===m} onClick={()=>setTravelMode(m)} className={`min-h-9 rounded-md border px-2 text-[11px] ${travelMode===m?'border-accent bg-surface text-accent-text':'border-line text-muted'}`}>{m==='bicycling'?'Cycle':m==='walking'?'Walk':m==='driving'?'Drive':'Public transport'}</button>)}</div><a href={directionsUrl(origin,selected,travelMode)} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-accent px-3 text-[12px] font-semibold text-white">Get directions in Google Maps</a><p className="mt-2 text-[10.5px] leading-relaxed text-muted">Google Maps calculates the actual route, distance and travel time. Both endpoints are reference points; check the entrance, especially for parks and stations.</p></div>}
     </Section>
   );
 }

@@ -227,3 +227,17 @@ Regional stats and optional district details load by postcode area. Production a
 The Crime tab queries the public [Police.uk API](https://data.police.uk/docs/method/crime-street/) on demand for a chosen published month and displayed search area. Returned category, month, anonymised street/coordinates, optional context and latest outcome are shown. API IDs are not police incident references. Exact day/time and real addresses are deliberately not published: see the [anonymisation table](https://data.police.uk/about/#privacy-and-anonymisation). The feed is monthly, incomplete for some forces and not a live incident feed. Scotland has no territorial-force coverage. BTP is labelled in records and excluded from existing annual comparisons.
 
 Bounded postcode regions use bounding-box API retrieval then polygon filtering (holes and multipart shapes supported). Large regions, postcode reference points and named results use an explicitly labelled one-mile radius. API errors/limits remain errors. No-result responses do not prove no crime. `crime-coverage.json` contains lazy force/month coverage audit metadata, generated from current ONSPD memberships and archive filenames. It is separate from the live API response and does not guarantee completeness of individual records.
+
+### Dashboard, annual periods and derived insights
+
+Crime year/range queries retrieve monthly API records with two concurrent requests. Partial published years, per-force gaps and failed months are disclosed. Deduplicate persistent crime IDs across months; retain separate monthly ASB records. Monthly charts mark known gaps unavailable, without presenting an incomplete year as a complete annual total. Dashboard cohort medians/rankings apply only to the currently filtered regions at one geographic level. Comparison differences are B minus A, with percentage points for percentages; no automatic better/worse judgement.
+
+Three extra metrics are calculations from existing source-dated values: residents aged15–64 =100−under15−65+; age dependency ratio =(under15+65+)/15–64×100; without gigabit availability =100−gigabit availability. Missing input stays missing. These are not new survey observations, employment measures, actual financial dependency or experienced broadband speeds.
+
+### Environment Agency local observations
+
+The dashboard uses [Environment Agency flood-monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference) for England warnings/alerts and monitoring stations within a10km reference-point query. A bulk latest water-level query is joined by measure URI, retaining each reading's actual timestamp and source datum/units. Station distance is checked locally. Warnings may use approximate spatial filtering and their warning areas do not imply the selected property is affected. Empty results/errors/old readings are not evidence of safety. Uses Environment Agency flood and river level data from the real-time data API (Beta), under OGL v3.0. Five-minute client cache; no guarantee of continuous availability. Check the official flood service for current warnings.
+
+### Nearby directions
+
+Google Maps directions links use the selected postcode reference point as origin and the mapped feature point as destination, with an explicitly selected travel mode. Posty shows labelled straight-line distance; actual route distance/time are calculated by Google Maps after opening. Mapped points can differ from access entrances. No paid route service or house-level accuracy is claimed.

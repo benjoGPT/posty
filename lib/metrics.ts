@@ -23,5 +23,5 @@ export function metricStops(m: MetricDefinition, theme: 'light'|'dark'): [number
 export function formatMetric(value: number|undefined, m: MetricDefinition): string {
   if (value===undefined||!Number.isFinite(value)) return 'No data';
   const n=value.toLocaleString('en-GB',{maximumFractionDigits:m.precision});
-  return m.unit==='%'?`${n}%`:m.unit==='% change'?`${value>0?'+':''}${n}%`:`${n} ${m.unit}`;
+  return m.unit==='£'?`£${n}`:m.unit==='%'?`${n}%`:m.unit==='% change'?`${value>0?'+':''}${n}%`:`${n} ${m.unit}`;
 }

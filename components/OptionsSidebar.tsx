@@ -7,7 +7,7 @@ const MIN_WIDTH = 280;
 const widthLimit = () => Math.max(MIN_WIDTH, Math.min(640, Math.floor(window.innerWidth * 0.45)));
 const clampWidth = (width: number) => Math.max(MIN_WIDTH, Math.min(widthLimit(), width));
 
-export function OptionsSidebar({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+export function OptionsSidebar({ children, onClose,fullScreen=false }: { children: ReactNode; onClose: () => void;fullScreen?:boolean }) {
   const pane = useRef<HTMLElement>(null);
   const splitter = useRef<HTMLDivElement>(null);
   const current = useRef(DEFAULT_WIDTH);
@@ -19,7 +19,7 @@ export function OptionsSidebar({ children, onClose }: { children: ReactNode; onC
   function commit(next: number) {
     const value = clampWidth(Math.round(next));
     current.current = value;
-    if (pane.current) pane.current.style.width = `${value}px`;
+    if (pane.current&&!fullScreen) pane.current.style.width = `${value}px`;
     setWidth(value);
     try { localStorage.setItem('pc-options-width', String(value)); } catch { /* optional preference */ }
   }
@@ -31,10 +31,10 @@ export function OptionsSidebar({ children, onClose }: { children: ReactNode; onC
     current.current = initial;
     setWidth(initial);
     setMaximum(widthLimit());
-    const resize = () => { setMaximum(widthLimit()); commit(current.current); };
+    const resize = () => { if(window.innerWidth<768)return;setMaximum(widthLimit()); commit(current.current); };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(frame.current); };
-  }, []);
+  }, [fullScreen]);
 
   function finish() {
     if (!drag.current) return;
@@ -46,9 +46,9 @@ export function OptionsSidebar({ children, onClose }: { children: ReactNode; onC
   }
 
   return (
-    <aside ref={pane} id="map-options-sidebar" aria-label="Map options" style={{ width }} className="relative z-30 flex h-full shrink-0 flex-col border-r border-line bg-surface">
+    <aside ref={pane} id="map-options-sidebar" aria-label="Map options" style={{ width:fullScreen?'100%':width }} className={`${fullScreen?'fixed inset-0 z-40':'relative z-30'} flex h-full shrink-0 flex-col border-r border-line bg-surface`}>
       <div className="min-h-0 flex-1">{children}</div>
-      <div className="flex items-center justify-between border-t border-line px-4 py-2 text-[11px] text-muted">
+      {!fullScreen&&<><div className="flex items-center justify-between border-t border-line px-4 py-2 text-[11px] text-muted">
         <span>Drag the right edge to resize</span>
         <button type="button" onClick={() => commit(DEFAULT_WIDTH)} className="rounded px-1 py-1 text-accent-text hover:bg-surface-hover">Reset width</button>
       </div>
@@ -62,7 +62,7 @@ export function OptionsSidebar({ children, onClose }: { children: ReactNode; onC
           if (frame.current) return;
           frame.current = requestAnimationFrame(() => {
             frame.current = 0;
-            if (pane.current) pane.current.style.width = `${current.current}px`;
+            if (pane.current&&!fullScreen) pane.current.style.width = `${current.current}px`;
             splitter.current?.setAttribute('aria-valuenow', String(current.current));
             splitter.current?.setAttribute('aria-valuetext', `${current.current} pixels`);
           });
@@ -79,7 +79,7 @@ export function OptionsSidebar({ children, onClose }: { children: ReactNode; onC
           e.preventDefault(); commit(next);
         }}>
         <span className="h-12 w-1 rounded-full bg-line group-hover:bg-accent group-focus-visible:bg-accent group-data-[dragging]:bg-accent" aria-hidden />
-      </div>
+      </div></>}
     </aside>
   );
 }

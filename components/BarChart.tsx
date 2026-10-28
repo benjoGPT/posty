@@ -1,0 +1,5 @@
+import type {ReactNode} from 'react';
+export function BarChart({title,items,format=(n)=>n.toLocaleString('en-GB'),note}:{title:string;items:{label:string;value:number|null}[];format?:(n:number)=>string;note?:ReactNode}){
+ const max=Math.max(1,...items.map(x=>Math.abs(x.value??0)));
+ return <figure className="min-w-0 rounded-xl border border-line bg-surface p-4"><figcaption className="mb-3 text-[13px] font-semibold text-ink">{title}</figcaption><ul className="space-y-2">{items.map((x,i)=><li key={`${x.label}-${i}`} className="grid grid-cols-[minmax(70px,1fr)_minmax(50px,2fr)_auto] items-center gap-3 text-[12px]"><span className="truncate text-muted" title={x.label}>{x.label}</span><span className="h-2.5 overflow-hidden rounded bg-surface-2" aria-hidden><span className="block h-full rounded bg-accent" style={{width:x.value==null?'0%':`${Math.abs(x.value)/max*100}%`}}/></span><span className="tabular-nums text-ink">{x.value==null?'Unavailable':format(x.value)}</span></li>)}</ul>{note&&<div className="mt-3 text-[11px] leading-relaxed text-muted">{note}</div>}</figure>;
+}

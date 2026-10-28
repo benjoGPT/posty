@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import ts from 'typescript';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'posty-crime-'));test.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
-for(const [name,file]of Object.entries({crime:'lib/crime.ts',data:'lib/data.ts',metrics:'lib/metrics.ts',postcode:'lib/postcode.ts',app:'config/app.ts'})){
+for(const [name,file]of Object.entries({analysis:'lib/analysis.ts',crime:'lib/crime.ts',data:'lib/data.ts',metrics:'lib/metrics.ts',postcode:'lib/postcode.ts',app:'config/app.ts'})){
  const source=fs.readFileSync(file,'utf8').replace(/from ['"]\.\/([^'"]+)['"]/g,"from './$1.mjs'").replace("from '@/config/app'","from './app.mjs'");fs.writeFileSync(path.join(dir,name+'.mjs'),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
 }
 const crime=await import(pathToFileURL(path.join(dir,'crime.mjs')));

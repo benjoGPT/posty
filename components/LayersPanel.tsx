@@ -1,5 +1,6 @@
 'use client';
 
+import {OVERLAY_COLOURS,type MetricOverlay} from '@/lib/mapOverlays';
 import {metricFor,metricStops,type MetricDefinition,type DataAvailability} from '@/lib/metrics';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { APP_CONFIG, basemapById, type BasemapId } from '@/config/app';
@@ -8,6 +9,8 @@ import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGIO
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
+  fullScreen?:boolean;onFullScreen?:()=>void;onDashboard?:()=>void;
+  overlays?:MetricOverlay[];onOverlays?:(overlays:MetricOverlay[])=>void;
   crime?: ReactNode;
   crimeRequest?: number;
   onTabChange?:(tab:string)=>void;
@@ -127,10 +130,10 @@ export function LayersPanel(p: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col text-ink">
+    <div className={`flex h-full min-h-0 w-full flex-col text-ink ${p.fullScreen?'mx-auto max-w-[1400px]':''}`}>
       <header className="shrink-0 border-b border-line bg-surface px-4 pt-3">
         <div className="flex items-center justify-between gap-3">
-          <div><h2 className="text-[16px] font-semibold">Map options</h2><p className="mt-0.5 text-[12px] text-muted">Choose what the map shows.</p></div>
+          <div><h2 className="text-[16px] font-semibold">Map options</h2><p className="mt-0.5 text-[12px] text-muted">Choose what the map shows.</p><div className="mt-2 flex flex-wrap gap-2">{p.onFullScreen&&<button type="button" onClick={p.onFullScreen} className="min-h-8 rounded-md border border-line px-2 text-[11px] font-medium text-accent-text">{p.fullScreen?'Restore sidebar':'Full-screen menu'}</button>}{p.onDashboard&&<button type="button" onClick={p.onDashboard} className="min-h-8 rounded-md border border-line px-2 text-[11px] font-medium text-accent-text">Data dashboard</button>}</div></div>
           <button type="button" onClick={p.onClose} aria-label="Close map options" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-hover"><CloseIcon /></button>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1" role="tablist" aria-label="Map option sections" onKeyDown={e => {
@@ -151,7 +154,8 @@ export function LayersPanel(p: Props) {
           </div>
           {topic === 'Crime' && !search && <div className="px-4 pt-3"><button type="button" onClick={()=>{setTab('crime');remember('crime',topic);}} className="min-h-11 w-full rounded-lg border border-accent bg-accent-soft px-3 text-left text-[12px] font-semibold text-accent-text">Browse individual crime records →</button><p className="mt-2 text-[11px] leading-relaxed text-muted">Grey areas can have missing force data. Open Crime to check coverage and browse published records by month.</p></div>}
           <p role="status" className="px-4 pt-3 text-[11px] text-muted">{matches.length} {matches.length === 1 ? 'layer' : 'layers'}{search ? ` matching “${query.trim()}”` : ''} · choose one to colour the map</p>
-          {groups.map(group => <Group key={group} title={group}>{layerRows(group === 'Popular layers' ? matches : matches.filter(m => m.topic === group))}</Group>)}
+          {p.onOverlays&&<details className="mx-4 mt-3 rounded-lg border border-line p-3"><summary className="cursor-pointer text-[12px] font-semibold">Additional data layers ({p.overlays?.length??0}/2)</summary><p className="mt-2 text-[11px] leading-relaxed text-muted">Keep the main colour layer and add two regional bubble measures. Larger circles mean higher values within each measure. Missing values have no bubble; compare values in the details or dashboard.</p>{[0,1].map(i=><div key={i} className="mt-3"><label className="flex items-center gap-2 text-[11px]"><span className="size-2.5 rounded-full" style={{background:OVERLAY_COLOURS[i]}}/>Overlay {i+1}<select aria-label={`Data overlay ${i+1}`} value={p.overlays?.[i]?.id??''} onChange={e=>{const next=[...(p.overlays??[])];if(!e.target.value)next.splice(i,1);else next[i]={id:e.target.value,opacity:next[i]?.opacity??.65};p.onOverlays?.(next.filter(Boolean));}} className="min-h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-[11px]"><option value="">None</option>{(p.metrics??[]).filter(m=>m.status==='available'&&!(p.overlays??[]).some((o,j)=>j!==i&&o.id===m.id)).map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label>{p.overlays?.[i]&&<label className="mt-2 flex items-center gap-2 text-[10px] text-muted">Opacity<input aria-label={`Overlay ${i+1} opacity`} type="range" min="15" max="100" step="5" value={Math.round(p.overlays[i].opacity*100)} onChange={e=>p.onOverlays?.(p.overlays!.map((o,j)=>j===i?{...o,opacity:Number(e.target.value)/100}:o))} className="min-w-0 flex-1"/>{Math.round(p.overlays[i].opacity*100)}%</label>}{p.overlays?.[i]&&<p className="mt-1 text-[10px] leading-relaxed text-muted">{p.metrics?.find(m=>m.id===p.overlays?.[i]?.id)?.period} · <a href={p.metrics?.find(m=>m.id===p.overlays?.[i]?.id)?.source} target="_blank" rel="noreferrer" className="underline">Source</a></p>}</div>)}</details>}
+          <div className={p.fullScreen?'grid items-start gap-x-4 md:grid-cols-2 xl:grid-cols-3':''}>{groups.map(group => <Group key={group} title={group}>{layerRows(group === 'Popular layers' ? matches : matches.filter(m => m.topic === group))}</Group>)}</div>
           {!matches.length && <div className="px-4 py-8 text-[13px] text-muted"><p>No layers found. Try crime, population or broadband.</p><button type="button" onClick={() => { setQuery(''); setTopic('All'); remember(tab, 'All'); }} className="mt-3 rounded-lg border border-line px-3 py-2 text-accent-text">Show all layers</button></div>}
         </>}
 

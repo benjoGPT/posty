@@ -1,3 +1,4 @@
+import {DERIVED_METRICS,deriveValues} from './analysis';
 import { setMetricDefinitions, type CommunityData } from './metrics';
 // Data-access layer for the static postcode dataset produced by the pipeline.
 // Nothing is loaded up front except a small index; boundary and postcode
@@ -104,6 +105,7 @@ export class PostcodeData {
     ]);
     this.insights = insights;
     this.community = community;
+    if(community){community.metrics=[...community.metrics.filter(m=>!DERIVED_METRICS.some(d=>d.id===m.id)),...DERIVED_METRICS];for(const [code,v]of Object.entries(community.regions))community.regions[code]=deriveValues(v);}
     setMetricDefinitions(community?.metrics ?? []);
     const enrich = (p: {c:string}) => { const values=community?.regions[p.c]; if(values)Object.assign(p,Object.fromEntries(Object.entries(values).filter(([,v])=>Number.isFinite(v)).map(([k,v])=>['mx_'+k,v]))); };
     for(const g of [...index.areas,...index.districts])enrich(g);
@@ -155,7 +157,7 @@ export class PostcodeData {
     if (!this.manifest.regionalShards) return;
     const stats = await this.fetchJson<{community: Record<string,Record<string,number>>; insights: Record<string,InsightProps>; details: Record<string,RegionExtras & {adm?: AdminBreakdown}>}>(`region-stats/${area}.json`);
     this.regionalFailures.delete(area);
-    if(this.community) Object.assign(this.community.regions,stats.community);
+    if(this.community) Object.assign(this.community.regions,Object.fromEntries(Object.entries(stats.community).map(([c,v])=>[c,deriveValues(v)])));
     if(this.insights) Object.assign(this.insights.groups,stats.insights);
     for(const [code,detail] of Object.entries(stats.details)) { const d=this.districts.get(code); if(d)Object.assign(d,detail,stats.insights[code]??{}); }
   }
@@ -181,7 +183,7 @@ export class PostcodeData {
       this.fetchJson<RegionCollection>(`sectors/${area}.geojson`),
       this.manifest.regionalShards ? this.loadRegionStats(area).then(()=>null).catch(()=>{this.regionalFailures.add(area);return null;}) : this.community ? this.fetchJson<Record<string,Record<string,number>>>(`community/sectors/${area}.json`).catch(()=>null) : Promise.resolve(null),
     ]);
-    if(values&&this.community)Object.assign(this.community.regions,values);
+    if(values&&this.community)Object.assign(this.community.regions,Object.fromEntries(Object.entries(values).map(([c,v])=>[c,deriveValues(v)])));
     return this.enrichFeatures(fc);
   }
 
