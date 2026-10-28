@@ -37,10 +37,16 @@ jobs:
           ONSPD_URL: ${{ inputs.onspd_url }}
         run: node pipeline/fetch-onspd.mjs "$ONSPD_URL"
 
+      - name: House prices (Land Registry)
+        run: npm run data:prices
+
       - name: Build data
         env:
           DETAIL: ${{ inputs.detail }}
         run: npm run data:build -- --source onspd --input "$ONSPD_CSV" --detail "$DETAIL"
+
+      - name: Nearby places (Overture Maps)
+        run: npm run data:places
 
       - name: Verify
         run: npm run data:verify

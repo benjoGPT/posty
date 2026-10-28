@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { AdminBreakdown, PostcodeData, RegionProps } from '@/lib/data';
+import type { AdminBreakdown, NearbyPlace, PostcodeData, RegionProps } from '@/lib/data';
+import { AboutPostcode, Nearby, RegionPrices, UnitPrices } from './PanelSections';
 import { LEVEL_LABELS } from '@/lib/levels';
 import { lookupPostcode, type LookupResult } from '@/lib/lookup';
 import type { StackedUnit } from '@/lib/mapController';
@@ -20,6 +21,7 @@ interface Props {
   onCopy: (text: string, what: string) => void;
   onShare: () => void;
   onClose: () => void;
+  onShowPlace: (p: NearbyPlace) => void;
 }
 
 // ONSPD positional quality indicator (osgrdind).
@@ -123,12 +125,21 @@ function SourceFooter({ data, extra }: { data: PostcodeData; extra?: string }) {
 
 // -----------------------------------------------------------------------------
 
-function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onShare, onClose }: Props & { sel: Extract<Selection, { kind: 'unit' }> }) {
+function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onShare, onClose, onShowPlace }: Props & { sel: Extract<Selection, { kind: 'unit' }> }) {
   const lookup = useAsync<LookupResult>(() => lookupPostcode(sel.code), [sel.code]);
   const area = data.areas.get(areaOf(sel.code));
   const coords = `${sel.lat.toFixed(6)}, ${sel.lng.toFixed(6)}`;
   const admin = lookup?.status === 'live' ? lookup.data : null;
   const nearby = useAsync(() => data.nearestUnits(sel.lng, sel.lat, 6, sel.code), [sel.code, sel.lng, sel.lat]);
+  const local = useAsync(() => (data.isDetailArea(areaOf(sel.code)) ? data.findUnit(sel.code) : Promise.resolve(null)), [sel.code]);
+  const places = useAsync(() => data.nearbyPlaces(sel.lng, sel.lat), [sel.lng, sel.lat]);
+  const sectors = useAsync(() => data.loadSectors(areaOf(sel.code)), [sel.code]);
+  const sectorPrices = sectors?.features.find((f) => !f.properties.label && f.properties.c === sectorOf(sel.code))?.properties.pp ?? null;
+  const prices = data.manifest.prices;
+  const countries = admin?.country ? [admin.country] : (area?.adm?.countries ?? []).map(([c]) => c);
+  const priceCovered = countries.some((c) => c === 'England' || c === 'Wales');
+  const newSince = data.manifest.extras?.introduced?.newSince;
+  const isNew = !!(local?.introduced && newSince && local.introduced > newSince);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${sel.lat.toFixed(6)},${sel.lng.toFixed(6)}`;
 
   return (
@@ -136,7 +147,7 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
       <Header
         eyebrow="Postcode"
         title={<span className="tabular">{sel.code}</span>}
-        badge={sel.status === 'terminated' ? <Badge tone="warn">Terminated</Badge> : <Badge tone="ok">Live</Badge>}
+        badge={sel.status === 'terminated' ? <Badge tone="warn">Terminated</Badge> : <><Badge tone="ok">Live</Badge>{isNew && <Badge tone="neutral">New</Badge>}</>}
         onClose={onClose}
       />
       {sel.status === 'terminated' && sel.terminated && (
@@ -187,6 +198,12 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
         </a>
       </Section>
 
+      {places && <Nearby places={places} onShow={onShowPlace} />}
+
+      {prices && (
+        <UnitPrices sales={local?.sales} sector={sectorPrices} sectorCode={sectorOf(sel.code)} period={prices} covered={priceCovered} />
+      )}
+
       {nearby && nearby.length > 0 && (
         <Section title="Nearby postcodes">
           <ul className="grid grid-cols-2 gap-1.5">
@@ -222,6 +239,7 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
           </dl>
         )}
       </Section>
+      <AboutPostcode admin={admin} introduced={local?.introduced} />
       <SourceFooter data={data} extra={sel.origin === 'remote' ? 'This postcode’s position comes from postcodes.io.' : undefined} />
     </>
   );
@@ -307,6 +325,8 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
   }
 
   const name = sel.kind === 'area' ? area?.name : null;
+  const regionInfo = sel.kind === 'area' ? area : sel.kind === 'district' ? district : sectorProps;
+  const regionPrices = regionInfo?.pp ?? null;
   return (
     <>
       <Header
@@ -324,6 +344,18 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
           <div className="text-[11.5px] text-muted">Land area (approx.)</div>
           <div className="tabular text-[17px] font-semibold text-ink">{km2 != null ? `${km2 < 10 ? km2.toFixed(1) : Math.round(km2).toLocaleString()} km²` : '—'}</div>
         </div>
+        {regionInfo?.ur !== undefined && (
+          <div className="rounded-lg bg-surface-2 px-3 py-2">
+            <div className="text-[11.5px] text-muted">Urban postcodes</div>
+            <div className="tabular text-[17px] font-semibold text-ink">{Math.round(regionInfo.ur * 100)}%</div>
+          </div>
+        )}
+        {regionInfo?.nw !== undefined && (
+          <div className="rounded-lg bg-surface-2 px-3 py-2">
+            <div className="text-[11.5px] text-muted">New in last 2 years</div>
+            <div className="tabular text-[17px] font-semibold text-ink">{regionInfo.nw.toLocaleString()}</div>
+          </div>
+        )}
       </div>
       <div className="flex gap-2 px-4 pb-3.5">
         <ActionButton primary onClick={onZoom} icon={<ZoomInIcon width={15} height={15} />}>Zoom to {sel.code}</ActionButton>
@@ -340,6 +372,8 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
       {(sel.kind === 'area' ? area?.adm : sel.kind === 'district' ? district?.adm : undefined) && (
         <WhereItIs adm={(sel.kind === 'area' ? area!.adm : district!.adm)!} code={sel.code} kind={sel.kind} method={data.manifest.admin?.method} />
       )}
+
+      {regionPrices && data.manifest.prices && <RegionPrices pp={regionPrices} period={data.manifest.prices} />}
 
       {sel.kind !== 'area' && (
         <Section title="Part of">

@@ -16,6 +16,15 @@ export interface LivePostcode {
   parish: string | null;
   parliamentary_constituency: string | null;
   date_of_introduction: string | null;
+  // Further ONSPD fields postcodes.io may include; each is shown only when present.
+  bua?: string | null;
+  ruc21?: string | null;
+  ruc11?: string | null;
+  index_of_multiple_deprivation?: number | null;
+  pfa?: string | null;
+  national_park?: string | null;
+  senedd_constituency?: string | null;
+  lsoa?: string | null;
 }
 
 export interface TerminatedPostcode {

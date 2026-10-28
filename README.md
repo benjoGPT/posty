@@ -33,6 +33,9 @@ postcode.
 - **Find my nearest postcode** (device location), nearby postcodes, "Open in Google Maps"
 - **Postcode quiz**: name the highlighted district or area, with score and best streak
 - **Borders**: England/Wales/Scotland borders and council boundaries, plus a **“Where it is”** breakdown for every area and district (e.g. SY: 67% England, 33% Wales; 63% Shropshire, 21% Powys…)
+- **House prices** (Land Registry): per postcode, sector, district and area, by property type and year, plus a price colour mode
+- **Nearby**: postbox (with Royal Mail reference and collection times where mapped), stations, bus stops, schools and GP surgeries, on the map and in the panel
+- **About this postcode**: built-up area, urban/rural, deprivation rank, police force and more (from postcodes.io); urban/rural colour mode and “new postcode” badges when built from official ONSPD
 - Recent searches; Home and "View entire UK" controls; legend; level indicator; installable as an app on phones
 - Phone-friendly: compact top bar, draggable bottom sheets, large touch targets, no accidental iOS zoom
 - Shareable URLs: `/?pc=SY1+1AD#map=16.5/52.7055/-2.7506`
@@ -86,6 +89,19 @@ The cross-check compares the data with independent sources and writes
 Options: `--detail SY,TF,WV,DY` (or `all`) sets which areas get sector and postcode
 detail; `--include-ni` includes Northern Ireland (read the licensing note first).
 Defaults live in `pipeline/config.json`.
+
+Optional enrichments (run `data:prices` before `data:build`, `data:places` after it):
+
+```bash
+npm run data:prices
+```
+
+```bash
+npm run data:places
+```
+
+`data:prices` adds HM Land Registry house prices; `data:places` adds postboxes,
+stations, bus stops, schools and GP surgeries from Overture Maps / OpenStreetMap.
 
 One-off reference steps, only needed when upgrading those inputs:
 `npm run data:land` (coastline), `npm run data:admin` (council and country

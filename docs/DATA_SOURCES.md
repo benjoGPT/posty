@@ -11,7 +11,52 @@
 | Area names | Royal Mail postcode area names, hand-compiled (`pipeline/reference/postcode-areas.json`) | Factual list | Labels such as "SY · Shrewsbury" |
 | Council boundaries | ONS Local Authority Districts, December 2021, ultra-generalised (via the ONS data-visualisation team's GitHub, `ONSvisual/topojson_boundaries`) | Open Government Licence v3.0 | Council overlay; “Where it is” breakdown when the source has no council codes |
 | National borders | ONS Local Authority Districts 2013, generalised (via `martinjc/UK-GeoJSON`), dissolved to countries | Open Government Licence v3.0 | England–Wales and England–Scotland border lines |
+| House prices | [HM Land Registry Price Paid Data](https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads), last 3 years, standard sales (category A) | Open Government Licence v3.0 (see the Royal Mail note below) | Price colour mode; medians for areas, districts, sectors and postcodes (England & Wales) |
+| Nearby postboxes, stations, bus stops, schools | OpenStreetMap via [Overture Maps](https://overturemaps.org) base theme | ODbL 1.0 (© OpenStreetMap contributors) | Map pins and the “Nearby” panel section (detail areas) |
+| GP surgeries | Overture Maps places theme | CDLA Permissive 2.0 | Map pins and the “Nearby” panel section (detail areas) |
+| Urban/rural, date introduced | ONSPD fields `ruc21ind`/`ru11ind`, `dointr` | Open Government Licence v3.0 | Urban colour mode and “new postcode” facts — only when built from official ONSPD |
+| Deprivation, built-up area, police force, national park, Senedd constituency | postcodes.io (ONSPD-derived) | OGL v3 | “About this postcode” panel section, fetched live |
 | Label fonts | Noto Sans (via `@fontsource/noto-sans`) | SIL OFL 1.1 | Self-hosted map label glyphs (`public/fonts`) |
+
+## House prices: what they do and don't say
+
+- Medians of **standard sales** registered with Land Registry (PPD category A),
+  over the last 36 months; the headline uses the last 12 months where there are
+  at least 10 sales. Repossessions, company purchases and other "additional
+  price paid" entries are excluded.
+- Medians from fewer than 5 sales are not shown, and fewer than 20 are flagged.
+- The latest few months are incomplete: sales take weeks to months to register.
+- Scotland and Northern Ireland are not covered (different registries).
+- Map colour steps are placed at quantiles of district medians, so each colour
+  holds a similar number of districts.
+- **Commercial use:** Land Registry states the address fields in Price Paid Data
+  (including postcodes) are derived from Royal Mail data, and their commercial use
+  may need a Royal Mail licence. Fine for a free, non-commercial map; check before
+  reusing it in a paid product.
+
+## Nearby places: what they do and don't say
+
+Built by `npm run data:places`, which reads only the needed parts of Overture's
+GeoParquet files (HTTP range requests). These are volunteer-mapped (OpenStreetMap)
+or business-listing (Overture places) data, not the official registers:
+
+- **Postboxes** — collection times and Royal Mail references only where mapped.
+  Royal Mail's own list is not openly licensed.
+- **Schools** — school grounds from OSM; phase from the mapped ISCED level or the
+  name. The official register is DfE GIAS (England) / Welsh Government lists.
+- **GP surgeries** — high-confidence Overture places with practice-like names.
+  The official list is NHS ODS (England) / NHS Wales; these could replace it.
+- **Stations** — National Rail, heritage railways and bus stations are labelled
+  separately. NaPTAN would be the official stop list.
+- Distances are straight-line, not walking routes.
+
+## Not yet included (and why)
+
+Census population/age (Nomis), broadband speeds (Ofcom, needs an API key) and
+flood risk (Environment Agency / Natural Resources Wales) are all openly
+licensed, but their download hosts were not reachable from the environment the
+data was built in. Each could be added as a pipeline step run from the GitHub
+Action, like the official ONSPD download.
 
 ## Why ONSPD
 

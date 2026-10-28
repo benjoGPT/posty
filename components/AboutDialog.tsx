@@ -55,9 +55,11 @@ function CrossCheckBlock({ c }: { c: CrossCheck }) {
 export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClose: () => void; manifest: Manifest | null }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [check, setCheck] = useState<CrossCheck | null>(null);
+  const [places, setPlaces] = useState<{ source: string; counts: Record<string, number>; attribution: string; notes: Record<string, string> } | null>(null);
   useEffect(() => {
     if (!open || check) return;
     fetch(`${APP_CONFIG.dataBaseUrl}/crosscheck.json`).then((r) => (r.ok ? r.json() : null)).then(setCheck, () => {});
+    fetch(`${APP_CONFIG.dataBaseUrl}/places/meta.json`).then((r) => (r.ok ? r.json() : null)).then(setPlaces, () => {});
   }, [open, check]);
   useEffect(() => {
     const d = ref.current;
@@ -118,6 +120,23 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
                   {manifest.admin.method === 'onspd' ? 'taken from each postcode’s council code in ONSPD.' : 'estimated by placing each postcode in these council boundaries.'}
                 </p>
                 <p className="text-[12.5px]">{manifest.admin.attribution}.</p>
+              </Block>
+            )}
+            {manifest.prices && (
+              <Block title="House prices">
+                <p>
+                  {manifest.prices.source}, standard sales only, {String(manifest.prices.from36).replace(/(\d{4})(\d{2})/, '$2/$1')} to {String(manifest.prices.latestMonth).replace(/(\d{4})(\d{2})/, '$2/$1')}. England and Wales only. Medians, not averages, so single unusual sales don’t skew them.
+                </p>
+                <p className="text-[12.5px]">{manifest.prices.attribution} Address fields in this data, including postcodes, are derived from Royal Mail data; commercial reuse of those needs a Royal Mail licence.</p>
+              </Block>
+            )}
+            {places && (
+              <Block title="Nearby places">
+                <p>
+                  {places.source}: {Object.entries(places.counts).map(([k, v]) => `${v.toLocaleString()} ${k === 'gps' ? 'GP surgeries' : k === 'stops' ? 'bus stops' : k}`).join(', ')} in the detail areas.
+                </p>
+                <ul className="list-disc space-y-0.5 pl-5 text-[12.5px]">{Object.values(places.notes).map((n) => <li key={n}>{n}</li>)}</ul>
+                <p className="text-[12.5px]">{places.attribution}.</p>
               </Block>
             )}
             <Block title="Postcode points">

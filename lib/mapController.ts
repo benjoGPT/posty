@@ -4,12 +4,12 @@
 import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
 import { APP_CONFIG, basemapById, type Basemap, type BasemapId, type Bounds } from '@/config/app';
-import type { BBox, PostcodeData, RegionCollection, RegionFeature, UnitFeature } from './data';
+import type { BBox, PlaceSets, PostcodeData, RegionCollection, RegionFeature, UnitFeature } from './data';
 import { containsPoint, featureContains, intersects } from './data';
 import { FALLBACK_THRESHOLDS, LEVEL_LABELS, levelForZoom, thresholdsFor, type DetailMode, type Level, type Thresholds } from './levels';
 import {
-  applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
-  type BorderOptions, type ColourMode, type RegionLevel, type Theme,
+  applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, setPriceScale, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
+  PLACE_STYLE, PLACES_SOURCE, type BorderOptions, type ColourMode, type PlaceToggles, type RegionLevel, type Theme,
 } from './mapLayers';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
@@ -37,6 +37,7 @@ interface ControllerOptions {
   basemap: BasemapId;
   colourMode: ColourMode;
   borders: BorderOptions;
+  places: PlaceToggles;
   mode: DetailMode;
   initialBounds?: Bounds;
   callbacks: Callbacks;
@@ -82,6 +83,7 @@ export class MapController {
     districts: new Map<string, RegionFeature[]>(),
     sectors: new Map<string, RegionFeature[]>(),
     units: new Map<string, UnitFeature[]>(),
+    places: new Map<string, PlaceSets>(),
   };
   private sourceKeys: Partial<Record<Level, string>> = {};
   private visibility: Record<string, boolean> = {};
@@ -173,11 +175,13 @@ export class MapController {
   }
 
   private onStyleLoad(): void {
+    setPriceScale(this.data.manifest.prices?.stops);
     installPostcodeLayers(this.map, this.theme, this.opts.colourMode, this.attribution());
     this.sourceKeys = {};
     this.visibility = {};
     this.hovered = null;
     this.bordersLoaded = { countries: false, councils: false };
+    this.placesKey = '';
     this.applyBordersNow();
     this.applyWindows();
     this.render();
@@ -220,6 +224,13 @@ export class MapController {
       }
     }
     applyBorders(this.map, this.opts.borders);
+  }
+
+  setPlaces(p: PlaceToggles): void {
+    this.opts.places = p;
+    this.placesKey = '';
+    void this.refresh();
+    this.scheduleRender();
   }
 
   /** Hides postcode labels (used by the quiz). */
@@ -367,6 +378,15 @@ export class MapController {
       }
     }
     this.unitsTooMany = false;
+    if (Object.values(this.opts.places).some(Boolean) && z >= 12) {
+      for (const a of areas) {
+        if (!a.detail || this.loaded.places.has(a.c)) continue;
+        jobs.push(async () => {
+          const p = await this.data.loadPlaces(a.c);
+          if (p) this.loaded.places.set(a.c, p);
+        });
+      }
+    }
     if (want('units', 0.8)) {
       const ds = this.data.districtsInBounds(b, true);
       if (ds.length > MAX_UNIT_DISTRICTS) this.unitsTooMany = true;
@@ -422,6 +442,30 @@ export class MapController {
     set('districts', pick(this.loaded.districts, (a) => this.data.areas.get(a)?.b));
     set('sectors', pick(this.loaded.sectors, (a) => this.data.areas.get(a)?.b));
     set('units', pick(this.loaded.units, (d) => this.data.districts.get(d)?.b));
+    this.renderPlaces(keep);
+  }
+
+  private placesKey = '';
+
+  /** Builds the place points for loaded areas near the view, keeping only the enabled kinds. */
+  private renderPlaces(keep: BBox): void {
+    const on = this.opts.places;
+    const areas = [...this.loaded.places.keys()].filter((a) => { const b = this.data.areas.get(a)?.b; return b && intersects(b, keep); }).sort();
+    const key = `${areas.join(',')}|${JSON.stringify(on)}`;
+    if (key === this.placesKey) return;
+    this.placesKey = key;
+    const features: Feature[] = [];
+    const add = (lng: number, lat: number, kind: string, icon: string, props: Record<string, unknown>) =>
+      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { kind, icon, ...props } });
+    for (const a of areas) {
+      const p = this.loaded.places.get(a)!;
+      if (on.postboxes) for (const [x, y, ref, times] of p.postboxes) add(x, y, 'postboxes', 'postboxes', { ref, times });
+      if (on.stations) for (const [x, y, name, type] of p.stations) add(x, y, 'stations', type, { name });
+      if (on.schools) for (const [x, y, name, phase] of p.schools) add(x, y, 'schools', 'schools', { name, phase });
+      if (on.gps) for (const [x, y, name] of p.gps) add(x, y, 'gps', 'gps', { name });
+      if (on.stops) for (const [x, y, name] of p.stops) add(x, y, 'stops', 'stops', { name });
+    }
+    (this.map.getSource(PLACES_SOURCE) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
   }
 
   // ---------------------------------------------------------------------------
@@ -446,7 +490,33 @@ export class MapController {
     return this.map.queryRenderedFeatures([[x - r, y - r], [x + r, y + r]], { layers: ['units-circle'] });
   }
 
+  private popup: maplibregl.Popup | null = null;
+
+  /** Shows a small popup for a place icon. Returns true if one was hit. */
+  private placeAt(e: MapMouseEvent): boolean {
+    const r = coarsePointer() ? 14 : 8;
+    const layers = ['places-icon', 'places-stops'].filter((l) => this.map.getLayer(l));
+    const hit = this.map.queryRenderedFeatures([[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]], { layers })[0];
+    if (!hit) return false;
+    const p = hit.properties as Record<string, string | null>;
+    const esc = (v: string) => v.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+    const type = PLACE_STYLE[p.icon ?? '']?.label ?? 'Place';
+    const lines = [
+      `<div class="pc-popup-type">${esc(type)}${p.phase && p.phase !== 'school' ? ` · ${esc(p.phase)}` : ''}</div>`,
+      p.name ? `<div class="pc-popup-name">${esc(p.name)}</div>` : '',
+      p.ref ? `<div>Box ${esc(p.ref)}</div>` : '',
+      p.kind === 'postboxes' ? `<div class="pc-popup-note">${p.times ? `Collections: ${esc(p.times)}` : 'Collection times not mapped'}</div>` : '',
+    ];
+    this.popup?.remove();
+    this.popup = new maplibregl.Popup({ closeButton: true, maxWidth: '240px', className: 'pc-popup', offset: 14 })
+      .setLngLat((hit.geometry as Point).coordinates as [number, number])
+      .setHTML(lines.join(''))
+      .addTo(this.map);
+    return true;
+  }
+
   private onClick(e: MapMouseEvent): void {
+    if (this.placeAt(e)) return;
     const r = coarsePointer() ? 16 : 9;
     const units = this.unitsAt(e.point.x, e.point.y, r);
     if (units.length) {
@@ -481,6 +551,15 @@ export class MapController {
     if (!e || this.destroyed || !this.map.getLayer('units-circle')) return;
     // Hit-testing during a pan/zoom is wasted work and makes the tooltip jitter.
     if (this.map.isMoving()) { this.clearHover(); return; }
+    const placeLayers = ['places-icon', 'places-stops'].filter((l) => this.map.getLayer(l) && this.map.getLayoutProperty(l, 'visibility') !== 'none');
+    const place = placeLayers.length ? this.map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: placeLayers })[0] : undefined;
+    if (place) {
+      this.clearHover(false);
+      this.map.getCanvas().style.cursor = 'pointer';
+      const icon = String(place.properties.icon);
+      this.opts.callbacks.onHover({ x: e.point.x, y: e.point.y, title: String(place.properties.name ?? PLACE_STYLE[icon]?.label ?? 'Place'), subtitle: place.properties.name ? PLACE_STYLE[icon]?.label ?? '' : place.properties.ref ? `Box ${place.properties.ref}` : '' });
+      return;
+    }
     const unit = this.unitsAt(e.point.x, e.point.y, 5)[0];
     const f = unit ?? this.regionAt(e.point);
     const id = f ? String(f.properties.c) : null;

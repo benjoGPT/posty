@@ -23,23 +23,45 @@ export interface Manifest {
   };
   boundaries: { method: string; description: string; coastline: string };
   admin?: { method: 'onspd' | 'boundaries'; councils: string; borders: string; attribution: string };
+  prices?: { source: string; attribution: string; note: string; latestMonth: number; from12: number; from36: number; stops?: number[]; minSales?: number } | null;
+  extras?: { urbanRural: boolean; introduced: { newSince: number; latest: number } | null };
   coverage: { outline: 'all'; detailAreas: string[]; includesNorthernIreland: boolean; note: string | null };
   counts: { postcodes: number; areas: number; districts: number; sectors: number; detailPostcodes: number };
 }
 
 /** Postcode counts by council and by country (largest first). */
 export interface AdminBreakdown { councils: [string, number][]; countries: [string, number][] }
-export interface AreaInfo { c: string; name: string | null; n: number; nd: number; km2: number | null; b: BBox; l: [number, number]; detail: boolean; adm?: AdminBreakdown }
-export interface DistrictInfo { c: string; n: number; ns: number; km2: number | null; b: BBox; l: [number, number]; adm?: AdminBreakdown }
+/**
+ * House prices (HM Land Registry): sales and median price over 12 and 36
+ * months, by property type (D/S/T/F) and by year — each as [sales, median].
+ */
+export interface PriceSummary { n12: number; m12: number | null; n36: number; m36: number | null; type: Record<string, [number, number]>; year: Record<string, [number, number]> }
+/** Optional extras: share of postcodes that are urban (0–1) and count of recently introduced postcodes. */
+interface RegionExtras { pp?: PriceSummary; ur?: number; nw?: number }
+export interface AreaInfo extends RegionExtras { c: string; name: string | null; n: number; nd: number; km2: number | null; b: BBox; l: [number, number]; detail: boolean; adm?: AdminBreakdown }
+export interface DistrictInfo extends RegionExtras { c: string; n: number; ns: number; km2: number | null; b: BBox; l: [number, number]; adm?: AdminBreakdown }
 
-export interface RegionProps { c: string; n: number; name?: string | null; nd?: number; ns?: number; km2?: number; b?: BBox; label?: boolean; a?: string; d?: string }
+export interface RegionProps extends RegionExtras { c: string; n: number; name?: string | null; nd?: number; ns?: number; km2?: number; b?: BBox; label?: boolean; a?: string; d?: string; pm?: number }
 export type RegionFeature = Feature<Polygon | MultiPolygon | Point, RegionProps>;
 export type RegionCollection = FeatureCollection<Polygon | MultiPolygon | Point, RegionProps>;
 
-export interface UnitProps { c: string; s: string; d: string; q?: number }
+/** p = [sales in 36 months, median price]; i = month introduced (YYYYMM). */
+export interface UnitProps { c: string; s: string; d: string; q?: number; p?: [number, number]; i?: number }
 export type UnitFeature = Feature<Point, UnitProps>;
 
-export interface UnitRecord { postcode: string; lng: number; lat: number; quality?: number }
+export interface UnitRecord { postcode: string; lng: number; lat: number; quality?: number; sales?: [number, number]; introduced?: number }
+
+/** Nearby places (Overture Maps / OpenStreetMap) for a detail area. */
+export interface PlaceSets {
+  postboxes: [number, number, string | null, string | null][]; // lng, lat, Royal Mail ref, collection times
+  stops: [number, number, string | null][];
+  stations: [number, number, string | null, 'rail' | 'heritage' | 'bus'][];
+  schools: [number, number, string, string][]; // name, phase
+  gps: [number, number, string][];
+}
+export type PlaceKind = keyof PlaceSets;
+export interface NearbyPlace { kind: PlaceKind; name: string | null; lng: number; lat: number; metres: number; info?: string | null; ref?: string | null }
+export interface PlacesMeta { source: string; areas: string[]; counts: Record<PlaceKind, number>; attribution: string; notes: Record<string, string>; generated: string }
 
 export class DataError extends Error {}
 
@@ -120,12 +142,19 @@ export class PostcodeData {
     const p = fetch(`${this.base}/units/${district}.json`)
       .then((r) => {
         if (!r.ok) throw new DataError(`Couldn't load postcodes for ${district} (HTTP ${r.status})`);
-        return r.json() as Promise<{ d: string; u: [string, number, number, number?][] }>;
+        return r.json() as Promise<{ d: string; u: [string, number, number, number?][]; p?: Record<string, [number, number]>; i?: Record<string, number> }>;
       })
-      .then(({ d, u }) =>
+      .then(({ d, u, p, i }) =>
         u.map(([inward, lng, lat, q]) => ({
           type: 'Feature' as const,
-          properties: { c: `${d} ${inward}`, s: `${d} ${inward[0]}`, d, ...(q != null ? { q } : {}) },
+          properties: {
+            c: `${d} ${inward}`,
+            s: `${d} ${inward[0]}`,
+            d,
+            ...(q != null ? { q } : {}),
+            ...(p?.[inward] ? { p: p[inward] } : {}),
+            ...(i?.[inward] ? { i: i[inward] } : {}),
+          },
           geometry: { type: 'Point' as const, coordinates: [lng, lat] },
         })),
       );
@@ -141,7 +170,39 @@ export class PostcodeData {
     const f = units.find((u) => u.properties.c === postcode);
     if (!f) return null;
     const [lng, lat] = f.geometry.coordinates;
-    return { postcode, lng, lat, quality: f.properties.q };
+    return { postcode, lng, lat, quality: f.properties.q, sales: f.properties.p, introduced: f.properties.i };
+  }
+
+  /** Places metadata, or null when the places step hasn't been run. */
+  placesMeta(): Promise<PlacesMeta | null> {
+    return this.fetchJson<PlacesMeta>('places/meta.json').catch(() => null);
+  }
+
+  /** Places for a detail area (null where none were built). */
+  loadPlaces(area: string): Promise<PlaceSets | null> {
+    if (!this.isDetailArea(area)) return Promise.resolve(null);
+    return this.fetchJson<PlaceSets>(`places/${area}.json`).catch(() => null);
+  }
+
+  /** Places around a point, nearest first, from the areas within ~3 km. */
+  async nearbyPlaces(lng: number, lat: number): Promise<Record<PlaceKind, NearbyPlace[]> | null> {
+    const pad = 0.04;
+    const areas = this.areasInBounds([lng - pad, lat - pad, lng + pad, lat + pad]).filter((a) => a.detail);
+    const sets = (await Promise.all(areas.map((a) => this.loadPlaces(a.c)))).filter((x): x is PlaceSets => !!x);
+    if (!sets.length) return null;
+    const near = <T extends [number, number, ...unknown[]]>(rows: T[], kind: PlaceKind, map: (r: T) => Omit<NearbyPlace, 'kind' | 'lng' | 'lat' | 'metres'>, n: number) =>
+      rows
+        .map((r) => ({ kind, lng: r[0], lat: r[1], metres: haversine(lat, lng, r[1], r[0]), ...map(r) }))
+        .sort((a, b) => a.metres - b.metres)
+        .slice(0, n);
+    const all = <K extends PlaceKind>(k: K): PlaceSets[K] => sets.flatMap((s) => (s[k] ?? []) as unknown[]) as PlaceSets[K];
+    return {
+      postboxes: near(all('postboxes'), 'postboxes', (r) => ({ name: null, ref: r[2], info: r[3] }), 2),
+      stops: near(all('stops'), 'stops', (r) => ({ name: r[2] }), 1),
+      stations: near(all('stations'), 'stations', (r) => ({ name: r[2], info: r[3] }), 3),
+      schools: near(all('schools'), 'schools', (r) => ({ name: r[2], info: r[3] }), 3),
+      gps: near(all('gps'), 'gps', (r) => ({ name: r[2] }), 2),
+    };
   }
 
   /**

@@ -6,7 +6,7 @@ import { PostcodeData } from '@/lib/data';
 import type { DetailMode } from '@/lib/levels';
 import { reverseGeocode } from '@/lib/lookup';
 import type { HoverInfo, MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
-import type { BorderOptions, ColourMode, Theme } from '@/lib/mapLayers';
+import type { BorderOptions, ColourMode, PlaceToggles, Theme } from '@/lib/mapLayers';
 import { areaOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
 import { readUrlState, writeUrlState } from '@/lib/url';
@@ -31,8 +31,14 @@ function useIsMobile() {
 }
 
 // Per-viewer conveniences kept in localStorage (all optional).
-interface Prefs { basemap: BasemapId; colourMode: ColourMode; borders: BorderOptions; recent: NavTarget[] }
-const DEFAULT_PREFS: Prefs = { basemap: 'light', colourMode: 'colours', borders: { countries: true, councils: false }, recent: [] };
+interface Prefs { basemap: BasemapId; colourMode: ColourMode; borders: BorderOptions; places: PlaceToggles; recent: NavTarget[] }
+const DEFAULT_PREFS: Prefs = {
+  basemap: 'light',
+  colourMode: 'colours',
+  borders: { countries: true, councils: false },
+  places: { stations: true, postboxes: false, schools: false, gps: false, stops: false },
+  recent: [],
+};
 
 function loadPrefs(): Prefs {
   try {
@@ -43,6 +49,7 @@ function loadPrefs(): Prefs {
       ...raw,
       basemap: basemapById(raw.basemap ?? (legacyDark ? 'dark' : 'light')).id,
       borders: { ...DEFAULT_PREFS.borders, ...raw.borders },
+      places: { ...DEFAULT_PREFS.places, ...raw.places },
       recent: Array.isArray(raw.recent) ? raw.recent.slice(0, 6) : [],
     };
   } catch {
@@ -181,6 +188,7 @@ export default function Explorer() {
           basemap: initialPrefs.basemap,
           colourMode: initialPrefs.colourMode,
           borders: initialPrefs.borders,
+          places: initialPrefs.places,
           mode: url.detail,
           initialBounds: url.hasPosition ? undefined : (APP_CONFIG.homeRegion.bounds as Bounds),
           callbacks: {
@@ -257,6 +265,11 @@ export default function Explorer() {
   const changeBorders = (b: BorderOptions) => {
     updatePrefs({ borders: b });
     ctrl.current?.setBorders(b);
+  };
+
+  const changePlaces = (p: PlaceToggles) => {
+    updatePrefs({ places: p });
+    ctrl.current?.setPlaces(p);
   };
 
   const changeColourMode = (m: ColourMode) => {
@@ -346,6 +359,12 @@ export default function Explorer() {
       onCopy={(t, w) => void copy(t, w)}
       onShare={() => void copy(window.location.href, 'Link')}
       onClose={() => select(null)}
+      onShowPlace={(pl) => {
+        // Make sure that kind of place is visible, then go there.
+        const key = pl.kind;
+        if (!prefs.places[key]) changePlaces({ ...prefs.places, [key]: true });
+        ctrl.current?.flyTo(pl.lng, pl.lat, Math.max(16, ctrl.current.map.getZoom()), padding(true));
+      }}
     />
   );
   const layers = (
@@ -354,6 +373,9 @@ export default function Explorer() {
       colourMode={prefs.colourMode}
       borders={prefs.borders}
       onBorders={changeBorders}
+      places={prefs.places}
+      onPlaces={changePlaces}
+      available={{ prices: !!data?.manifest.prices, urban: !!data?.manifest.extras?.urbanRural }}
       mode={mode}
       showDetail={isMobile}
       onBasemap={changeBasemap}
@@ -431,6 +453,7 @@ export default function Explorer() {
               theme={theme}
               defaultOpen={!isMobile}
               unofficialData={!!data && !data.manifest.source.verified}
+              priceScale={data?.manifest.prices?.stops}
               onAbout={() => setAboutOpen(true)}
             />
           </div>

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { APP_CONFIG, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
-import { DENSITY_STOPS, REGION_COLOURS, type BorderOptions, type ColourMode } from '@/lib/mapLayers';
+import { DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type PlaceToggles } from '@/lib/mapLayers';
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
@@ -11,6 +11,10 @@ interface Props {
   colourMode: ColourMode;
   borders: BorderOptions;
   onBorders: (b: BorderOptions) => void;
+  places: PlaceToggles;
+  onPlaces: (p: PlaceToggles) => void;
+  /** Colour modes whose data exists in this build. */
+  available: { prices: boolean; urban: boolean };
   mode: DetailMode;
   showDetail: boolean;
   onBasemap: (id: BasemapId) => void;
@@ -23,7 +27,17 @@ interface Props {
 const COLOUR_MODES: { id: ColourMode; label: string; hint: string }[] = [
   { id: 'colours', label: 'Colours', hint: 'Neighbouring regions in different colours' },
   { id: 'density', label: 'Density', hint: 'Postcodes per km² — darker is denser' },
+  { id: 'prices', label: 'House prices', hint: 'Median sale price, last 3 years (England & Wales) — darker is pricier' },
+  { id: 'urban', label: 'Urban / rural', hint: 'Share of postcodes in urban areas — blue urban, red rural' },
   { id: 'outline', label: 'Outline', hint: 'Boundaries only' },
+];
+
+const PLACE_TOGGLES: { key: keyof PlaceToggles; icon: string; label: string }[] = [
+  { key: 'stations', icon: 'rail', label: 'Stations' },
+  { key: 'postboxes', icon: 'postboxes', label: 'Postboxes' },
+  { key: 'schools', icon: 'schools', label: 'Schools' },
+  { key: 'gps', icon: 'gps', label: 'GP surgeries' },
+  { key: 'stops', icon: 'stops', label: 'Bus stops' },
 ];
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -36,7 +50,12 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function ColourPreview({ mode }: { mode: ColourMode }) {
-  const colours = mode === 'colours' ? REGION_COLOURS.light : mode === 'density' ? DENSITY_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c) : ['transparent'];
+  const colours =
+    mode === 'colours' ? REGION_COLOURS.light
+    : mode === 'density' ? DENSITY_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
+    : mode === 'prices' ? PRICE_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
+    : mode === 'urban' ? URBAN_STOPS.light.map(([, c]) => c)
+    : ['transparent'];
   return (
     <span className="flex h-6 w-full overflow-hidden rounded-md border border-line" aria-hidden>
       {colours.map((c, i) => (
@@ -75,7 +94,7 @@ export function LayersPanel(p: Props) {
 
       <Group title="Colour regions by">
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Colour regions by">
-          {COLOUR_MODES.map((m) => {
+          {COLOUR_MODES.filter((m) => (m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : true)).map((m) => {
             const on = m.id === p.colourMode;
             return (
               <button
@@ -93,6 +112,27 @@ export function LayersPanel(p: Props) {
           })}
         </div>
         <p className="mt-2 text-[11.5px] leading-snug text-muted">{COLOUR_MODES.find((m) => m.id === p.colourMode)?.hint}.</p>
+      </Group>
+
+      <Group title="Show on the map">
+        <div className="flex flex-wrap gap-1.5">
+          {PLACE_TOGGLES.map(({ key, icon, label }) => {
+            const on = p.places[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => p.onPlaces({ ...p.places, [key]: !on })}
+                className={`flex h-9 items-center gap-1.5 rounded-full border pr-3 pl-1.5 text-[12.5px] font-medium transition-colors ${on ? 'border-accent bg-accent-soft text-accent-text' : 'border-line text-ink hover:bg-surface-hover'}`}
+              >
+                <span className="size-5 rounded-full border-2 border-surface" style={{ background: PLACE_STYLE[icon].colour, opacity: on ? 1 : 0.55 }} aria-hidden />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Zoom in to see them. From OpenStreetMap via Overture Maps; detail areas only.</p>
       </Group>
 
       <Group title="Borders">

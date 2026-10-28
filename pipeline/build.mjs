@@ -71,6 +71,8 @@ const lngList = [];
 const latList = [];
 const qualityList = [];
 const ladList = [];
+const introList = [];
+const urbanList = [];
 const seen = new Set();
 const skipped = { invalid: 0, duplicate: 0, northernIreland: 0 };
 
@@ -88,6 +90,8 @@ const { stats: sourceStats, meta: sourceMeta } = await adapter.load({
     latList.push(lat);
     qualityList.push(extra?.quality ?? null);
     ladList.push(extra?.lad ?? null);
+    introList.push(extra?.intro ?? null);
+    urbanList.push(extra?.urban ?? null);
   },
 });
 seen.clear();
@@ -202,6 +206,58 @@ const adminArea = tallyBy((i) => districtAreaId[sectorDistrict[recordSector[i]]]
 const adminDistrict = tallyBy((i) => sectorDistrict[recordSector[i]], districtCodes.length);
 
 // ---------------------------------------------------------------------------
+// 2c. Optional enrichments
+//   - house prices from raw/derived/prices.json (npm run data:prices)
+//   - urban/rural mix and recently introduced postcodes, when the source
+//     (official ONSPD) carries those fields
+// ---------------------------------------------------------------------------
+const pricesPath = path.join(ROOT, 'raw/derived/prices.json');
+const prices = fs.existsSync(pricesPath) ? JSON.parse(fs.readFileSync(pricesPath, 'utf8')) : null;
+if (prices) log(`House prices: ${prices.meta.source}, ${prices.meta.from36}–${prices.meta.latestMonth}`);
+const priceOf = (code) => prices?.groups[code] ?? null;
+// Medians from very few sales are noise: no map colour below this many sales (36 months).
+const MIN_PRICE_SALES = 5;
+// Colour steps at quantiles of district medians, so each band holds a similar
+// number of districts (a fixed scale would put most of the country in 2–3 bands).
+let priceStops = null;
+if (prices) {
+  const meds = Object.entries(prices.groups)
+    .filter(([c, g]) => /^[A-Z]{1,2}\d[A-Z\d]?$/.test(c) && g.n36 >= 20 && g.m36)
+    .map(([, g]) => g.m36)
+    .sort((a, b) => a - b);
+  const q = (p) => Math.round(meds[Math.min(meds.length - 1, Math.floor(p * meds.length))] / 5000) * 5000;
+  priceStops = [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95].map(q);
+  log(`Price colour steps (district medians, 5th–95th percentile): ${priceStops.map((v) => `£${v / 1000}k`).join(', ')}`);
+}
+
+const hasUrban = urbanList.some((u) => u !== null);
+const latestIntro = introList.reduce((m, v) => (v && v > m ? v : m), 0);
+// "New" = introduced in the 24 months up to the newest postcode in the release.
+const newSince = latestIntro ? latestIntro - 200 : Infinity;
+function extrasBy(groupOf, nGroups) {
+  const urban = new Int32Array(nGroups), known = new Int32Array(nGroups), fresh = new Int32Array(nGroups);
+  for (let i = 0; i < pcs.length; i++) {
+    const g = groupOf(i);
+    if (urbanList[i] !== null) { known[g]++; if (urbanList[i]) urban[g]++; }
+    if (introList[i] && introList[i] > newSince) fresh[g]++;
+  }
+  return (g) => ({
+    ...(hasUrban && known[g] ? { ur: Math.round((100 * urban[g]) / known[g]) / 100 } : {}),
+    ...(latestIntro ? { nw: fresh[g] } : {}),
+  });
+}
+const extrasArea = extrasBy((i) => districtAreaId[sectorDistrict[recordSector[i]]], areaCodes.length);
+const extrasDistrict = extrasBy((i) => sectorDistrict[recordSector[i]], districtCodes.length);
+const extrasSector = extrasBy((i) => recordSector[i], sectorCodes.length);
+if (hasUrban || latestIntro) log(`Extras: urban/rural ${hasUrban ? 'yes' : 'no'}, introduction dates ${latestIntro ? `yes (new = after ${newSince})` : 'no'}`);
+
+/** Small properties used for map colouring: median price (36 months) and urban share. */
+const mapProps = (code, extras) => {
+  const pp = priceOf(code);
+  return { ...(pp?.m36 && pp.n36 >= MIN_PRICE_SALES ? { pm: pp.m36 } : {}), ...(extras.ur !== undefined ? { ur: extras.ur } : {}) };
+};
+
+// ---------------------------------------------------------------------------
 // 3. Voronoi + dissolve
 // ---------------------------------------------------------------------------
 const sites = buildSites(lngs, lats, recordSector);
@@ -284,13 +340,13 @@ function features(polygons, codes, props, include = () => true) {
 }
 
 const areasOut = await finish(
-  features(levels.areas, areaCodes, (i) => ({ name: areaNames[areaCodes[i]] ?? null, n: countArea[i], nd: districtsPerArea[i], k: colourOf.areas[i] })),
+  features(levels.areas, areaCodes, (i) => ({ name: areaNames[areaCodes[i]] ?? null, n: countArea[i], nd: districtsPerArea[i], k: colourOf.areas[i], ...mapProps(areaCodes[i], extrasArea(i)) })),
   config.simplifyMetres.areas,
   0.0001,
 );
 log(`Areas: ${areasOut.polygons.length} polygons`);
 const districtsOut = await finish(
-  features(levels.districts, districtCodes, (i) => ({ a: districtArea[i], n: countDistrict[i], ns: sectorsPerDistrict[i], k: colourOf.districts[i] })),
+  features(levels.districts, districtCodes, (i) => ({ a: districtArea[i], n: countDistrict[i], ns: sectorsPerDistrict[i], k: colourOf.districts[i], ...mapProps(districtCodes[i], extrasDistrict(i)) })),
   config.simplifyMetres.districts,
   0.0001,
 );
@@ -299,7 +355,7 @@ const sectorsOut = await finish(
   features(
     levels.sectors,
     sectorCodes,
-    (i) => ({ d: sectorDistrictCode[i], a: districtArea[sectorDistrict[i]], n: countSector[i], k: colourOf.sectors[i] }),
+    (i) => ({ d: sectorDistrictCode[i], a: districtArea[sectorDistrict[i]], n: countSector[i], k: colourOf.sectors[i], ...mapProps(sectorCodes[i], extrasSector(i)), ...(priceOf(sectorCodes[i]) ? { pp: priceOf(sectorCodes[i]) } : {}), ...extrasSector(i) }),
     (i) => isDetail(districtArea[sectorDistrict[i]]),
   ),
   config.simplifyMetres.sectors,
@@ -345,7 +401,9 @@ for (const [area, polys] of groupByArea(sectorsOut.polygons, 'a')) {
   writeJson(`sectors/${area}.geojson`, { type: 'FeatureCollection', features: [...polys, ...labels] });
 }
 
-// Units: one compact file per district: [inward code, lng, lat, (positional quality)]
+// Units: one compact file per district: [inward code, lng, lat, (positional quality)],
+// plus optional per-postcode extras keyed by inward code: house sales `p`
+// ([sales in 36 months, median price]) and introduction month `i` (YYYYMM).
 const unitsByDistrict = new Map();
 for (let i = 0; i < pcs.length; i++) {
   const d = sectorDistrict[recordSector[i]];
@@ -362,7 +420,17 @@ for (const [d, list] of unitsByDistrict) {
     return row;
   });
   unitCount += rows.length;
-  writeJson(`units/${districtCodes[d]}.json`, { d: districtCodes[d], u: rows });
+  const extras = {};
+  const p = {}, intro = {};
+  for (const i of list) {
+    const inward = pcs[i].split(' ')[1];
+    const sold = prices?.units[pcs[i]];
+    if (sold) p[inward] = sold;
+    if (introList[i]) intro[inward] = introList[i];
+  }
+  if (Object.keys(p).length) extras.p = p;
+  if (Object.keys(intro).length) extras.i = intro;
+  writeJson(`units/${districtCodes[d]}.json`, { d: districtCodes[d], u: rows, ...extras });
 }
 
 const areaPoly = byCode(areasOut.polygons), areaLabel = byCode(areasOut.labels);
@@ -379,6 +447,8 @@ writeJson('index.json', {
     l: areaLabel.get(c)?.geometry.coordinates ?? meanPoint(boxArea[i]),
     detail: isDetail(c),
     adm: adminArea[i],
+    ...(priceOf(c) ? { pp: priceOf(c) } : {}),
+    ...extrasArea(i),
   })),
   districts: districtCodes.map((c, i) => ({
     c,
@@ -388,6 +458,8 @@ writeJson('index.json', {
     b: distPoly.get(c)?.properties.b ?? finiteBox(boxDistrict[i]),
     l: distLabel.get(c)?.geometry.coordinates ?? meanPoint(boxDistrict[i]),
     adm: { ...adminDistrict[i], councils: adminDistrict[i].councils.slice(0, 6) },
+    ...(priceOf(c) ? { pp: priceOf(c) } : {}),
+    ...extrasDistrict(i),
   })),
 });
 
@@ -439,6 +511,8 @@ writeJson('manifest.json', {
     borders: 'National borders from ONS Local Authority Districts (2013, generalised)',
     attribution: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data © Crown copyright and database right',
   },
+  prices: prices ? { ...prices.meta, stops: priceStops, minSales: MIN_PRICE_SALES } : null,
+  extras: { urbanRural: hasUrban, introduced: latestIntro ? { newSince, latest: latestIntro } : null },
   coverage: {
     outline: 'all',
     detailAreas,

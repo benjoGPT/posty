@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { LEVEL_LABELS, LEVELS, type Level } from '@/lib/levels';
-import { densityStops, PALETTE, REGION_COLOURS, type BorderOptions, type ColourMode, type Theme } from '@/lib/mapLayers';
+import { densityStops, PALETTE, priceStops, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type Theme } from '@/lib/mapLayers';
 import { LayersIcon } from './Icons';
 
 interface Props {
@@ -13,12 +13,13 @@ interface Props {
   theme: Theme;
   defaultOpen: boolean;
   unofficialData: boolean;
+  priceScale?: number[] | null;
   onAbout: () => void;
 }
 
 const fmt = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
 
-export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen, unofficialData, onAbout }: Props) {
+export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen, unofficialData, priceScale, onAbout }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   if (!open) {
     return (
@@ -78,6 +79,26 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
           <div className="tabular mt-0.5 flex justify-between text-[10.5px] text-faint">
             {densityStops(theme).filter((_, i) => i % 2 === 0).map(([v]) => <span key={v}>{fmt(v)}</span>)}
           </div>
+        </div>
+      )}
+
+      {colourMode === 'prices' && (
+        <div className="mt-2.5 border-t border-line pt-2">
+          <div className="mb-1 text-muted">Median house price, last 3 years</div>
+          <div className="flex h-2.5 overflow-hidden rounded-sm" aria-hidden>
+            {priceStops(theme, priceScale).map(([v, c]) => <span key={v} className="flex-1" style={{ background: c }} />)}
+          </div>
+          <div className="tabular mt-0.5 flex justify-between text-[10.5px] text-faint">
+            {priceStops(theme, priceScale).filter((_, i) => i % 2 === 0).map(([v]) => <span key={v}>£{v / 1000}k</span>)}
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-faint">Steps are spread so each holds a similar number of districts. England &amp; Wales only (Land Registry). Grey: no data or too few sales.</p>
+        </div>
+      )}
+      {colourMode === 'urban' && (
+        <div className="mt-2.5 border-t border-line pt-2">
+          <div className="mb-1 text-muted">Share of postcodes in urban areas</div>
+          <div className="h-2.5 rounded-sm" aria-hidden style={{ background: `linear-gradient(90deg, ${URBAN_STOPS[theme].map(([, c]) => c).join(', ')})` }} />
+          <div className="mt-0.5 flex justify-between text-[10.5px] text-faint"><span>Rural</span><span>Mixed</span><span>Urban</span></div>
         </div>
       )}
 

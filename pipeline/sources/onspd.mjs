@@ -35,6 +35,22 @@ function pickColumn(header, candidates, required = true) {
   return -1;
 }
 
+/**
+ * Collapses the rural–urban classifications to urban (true) / rural (false):
+ *  - 2021 England & Wales (ruc21ind): codes starting U are urban, R rural
+ *  - 2011 England & Wales (ru11ind): A–C urban, D–F rural
+ *  - Scotland (ru11ind, 8-fold): 1–5 urban (settlements of 3,000+), 6–8 rural
+ * Anything else (e.g. Northern Ireland, pseudo codes) is unknown (null).
+ */
+export function urbanFlag(ruc21, ru11) {
+  if (ruc21 && /^[UR]/.test(ruc21)) return ruc21[0] === 'U';
+  if (!ru11) return null;
+  if (/^[A-C]\d$/.test(ru11)) return true;
+  if (/^[D-F]\d$/.test(ru11)) return false;
+  if (/^[1-8]$/.test(ru11)) return Number(ru11) <= 5;
+  return null;
+}
+
 function csvFiles(input) {
   const stat = fs.statSync(input);
   if (stat.isFile()) return [input];
@@ -71,6 +87,9 @@ export async function load({ input, onRecord }) {
           grid: pickColumn(h, ['osgrdind', 'gridind'], false),
           ctry: pickColumn(h, [/^ctry(\d\dcd)?$/], false),
           lad: pickColumn(h, ['oslaua', /^lad\d\dcd$/], false),
+          intro: pickColumn(h, ['dointr'], false),
+          ruc21: pickColumn(h, ['ruc21ind'], false),
+          ru11: pickColumn(h, ['ru11ind'], false),
         };
         continue;
       }
@@ -81,7 +100,13 @@ export async function load({ input, onRecord }) {
       const grid = cols.grid >= 0 ? Number(f[cols.grid]) : null;
       // ONSPD uses lat 99.999999 / grid indicator 9 for postcodes without a grid reference.
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat > 90 || grid === 9) { stats.noLocation++; continue; }
-      onRecord(f[cols.pc], lat, lng, { quality: grid, country: cols.ctry >= 0 ? f[cols.ctry] : null, lad: cols.lad >= 0 ? f[cols.lad] : null });
+      onRecord(f[cols.pc], lat, lng, {
+        quality: grid,
+        country: cols.ctry >= 0 ? f[cols.ctry] : null,
+        lad: cols.lad >= 0 ? f[cols.lad] : null,
+        intro: cols.intro >= 0 && /^\d{6}$/.test(f[cols.intro]) ? Number(f[cols.intro]) : null,
+        urban: urbanFlag(cols.ruc21 >= 0 ? f[cols.ruc21] : null, cols.ru11 >= 0 ? f[cols.ru11] : null),
+      });
     }
   }
   return {
