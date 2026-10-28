@@ -96,6 +96,7 @@ export class MapController {
   private renderQueued = false;
   private hoverQueued: MapMouseEvent | null = null;
   private destroyed = false;
+  private resizeObserver: ResizeObserver;
   private labelsHidden = false;
   private bordersLoaded = { countries: false, councils: false };
   private refreshSeq = 0;
@@ -131,6 +132,10 @@ export class MapController {
       attributionControl: { compact: true },
       cooperativeGestures: false,
     });
+    this.resizeObserver = new ResizeObserver(() => {
+      if (!this.destroyed) this.map.resize();
+    });
+    this.resizeObserver.observe(container);
     this.map.touchZoomRotate.disableRotation();
     // Exposed for automated browser tests and debugging only.
     if (new URLSearchParams(window.location.search).has('debug')) (window as unknown as { __pcMap: maplibregl.Map }).__pcMap = this.map;
@@ -160,6 +165,7 @@ export class MapController {
 
   destroy(): void {
     this.destroyed = true;
+    this.resizeObserver.disconnect();
     this.marker?.remove();
     this.meMarker?.remove();
     this.map.remove();
@@ -203,6 +209,7 @@ export class MapController {
   }
 
   setColourMode(mode: ColourMode): void {
+    if (mode === this.opts.colourMode) return;
     this.opts.colourMode = mode;
     if (!this.map.getLayer('units-circle')) return;
     applyColourMode(this.map, mode, this.theme);

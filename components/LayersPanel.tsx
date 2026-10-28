@@ -50,7 +50,7 @@ const PLACE_TOGGLES: { key: keyof PlaceToggles; icon: string; label: string }[] 
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <fieldset className="px-4 py-3">
+    <fieldset className="border-b border-line px-3 py-4">
       <legend className="mb-2 text-[11px] font-semibold tracking-wider text-faint uppercase">{title}</legend>
       {children}
     </fieldset>
@@ -76,6 +76,14 @@ function ColourPreview({ mode }: { mode: ColourMode }) {
   );
 }
 
+function MeasureButton({ id, label, selected, onSelect }: { id: ColourMode; label: string; selected: boolean; onSelect: (mode: ColourMode) => void }) {
+  return <button type="button" role="radio" aria-checked={selected} onClick={() => onSelect(id)}
+    className={`flex min-h-11 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] leading-snug ${selected ? 'border-accent bg-accent-soft font-semibold text-accent-text' : 'border-line text-ink hover:border-faint hover:bg-surface-hover'}`}>
+    <span aria-hidden className={`size-3 shrink-0 rounded-full border ${selected ? 'border-accent bg-accent' : 'border-faint'}`} />
+    <span>{label}</span>
+  </button>;
+}
+
 export function LayersPanel(p: Props) {
   return (
     <div className="text-ink">
@@ -87,13 +95,13 @@ export function LayersPanel(p: Props) {
       </div>
 
       <Group title="Map style">
-        <div className="grid grid-cols-5 gap-2" role="radiogroup" aria-label="Map style">
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Map style">
           {APP_CONFIG.basemaps.map((b) => {
             const on = b.id === p.basemap;
             return (
-              <button key={b.id} role="radio" aria-checked={on} onClick={() => p.onBasemap(b.id)} className="group flex flex-col items-center gap-1.5">
+              <button key={b.id} role="radio" aria-checked={on} onClick={() => p.onBasemap(b.id)} className="group flex min-h-11 flex-col items-center gap-1.5">
                 <span
-                  className={`block aspect-square w-full rounded-lg border-2 transition-colors ${on ? 'border-accent' : 'border-line group-hover:border-faint'}`}
+                  className={`block h-7 w-full rounded-lg border-2 transition-colors ${on ? 'border-accent' : 'border-line group-hover:border-faint'}`}
                   style={{ background: `linear-gradient(135deg, ${b.swatch[0]} 55%, ${b.swatch[1]} 55%)` }}
                 />
                 <span className={`text-[11.5px] ${on ? 'font-semibold text-accent-text' : 'text-muted'}`}>{b.label}</span>
@@ -104,20 +112,28 @@ export function LayersPanel(p: Props) {
       </Group>
 
       <Group title="Colour regions by">
-        <label className="sr-only" htmlFor="metric-select">Map measure</label>
-        <select id="metric-select" value={p.colourMode} onChange={e=>p.onColourMode(e.target.value as ColourMode)} className="w-full rounded-lg border border-line bg-surface px-3 py-3 text-[13px] text-ink">
-          <optgroup label="Map and existing insights">
-            {COLOUR_MODES.filter(m=>m.id==='prices'?p.available.prices:m.id==='urban'?p.available.urban:m.id==='deprivation'?p.available.deprivation:m.id==='growth'?p.available.growth:true).map(m=><option key={m.id} value={m.id}>{m.id==='density'?'Postcode density':m.label}</option>)}
-          </optgroup>
-          {['People','Safety','Housing','Connectivity','Transport','Services','Environment'].map(topic=><optgroup key={topic} label={topic}>
-            {(p.metrics??[]).filter(m=>m.topic===topic&&m.status==='available').map(m=><option key={m.id} value={`metric:${m.id}`}>{m.title}</option>)}
-          </optgroup>)}
-        </select>
-        <div className="mt-2"><ColourPreview mode={p.colourMode}/></div>
-        <details className="mt-2 text-[11.5px] leading-snug text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-1">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m=>m.id===p.colourMode)?.hint}</p></details>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Colour regions by">
+          {COLOUR_MODES.filter(m => m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : m.id === 'deprivation' ? p.available.deprivation : m.id === 'growth' ? p.available.growth : true).map(m => (
+            <MeasureButton key={m.id} id={m.id} label={m.id === 'density' ? 'Postcode density' : m.label} selected={p.colourMode === m.id} onSelect={p.onColourMode} />
+          ))}
+        </div>
+      </Group>
+
+      <Group title="Selected measure">
+        <p className="mb-2 text-[12px] font-semibold">{metricFor(p.colourMode)?.title ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.label}</p>
+        <ColourPreview mode={p.colourMode} />
+        <details className="mt-2 text-[11.5px] leading-snug text-muted"><summary className="cursor-pointer">Definition and coverage</summary><p className="mt-1">{metricFor(p.colourMode)?.note ?? COLOUR_MODES.find(m => m.id === p.colourMode)?.hint}</p></details>
         {metricFor(p.colourMode) && <p className="mt-2 text-[11px] text-muted">{metricFor(p.colourMode)?.period} · <a className="text-accent-text underline" href={metricFor(p.colourMode)?.source} target="_blank" rel="noreferrer">Data source</a></p>}
       </Group>
-      {!!p.availability?.length && <Group title="Data availability"><details><summary className="cursor-pointer text-[12px] text-muted">Sources awaiting access or coverage</summary><ul className="mt-2 space-y-3">{p.availability.map(d=><li key={d.id} className="text-[11.5px] text-muted"><strong className="block text-ink">{d.title}</strong>{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Source / official service</a></li>)}</ul></details></Group>}
+      {['People', 'Safety', 'Housing', 'Connectivity', 'Transport', 'Services', 'Environment'].map(topic => {
+        const metrics = (p.metrics ?? []).filter(m => m.topic === topic && m.status === 'available');
+        if (!metrics.length) return null;
+        return <Group key={topic} title={topic}>
+          <div className="grid grid-cols-1 gap-1.5" role="radiogroup" aria-label={topic}>
+            {metrics.map(m => <MeasureButton key={m.id} id={`metric:${m.id}`} label={m.title} selected={p.colourMode === `metric:${m.id}`} onSelect={p.onColourMode} />)}
+          </div>
+        </Group>;
+      })}
 
       <Group title="Show on the map">
         <div className="flex flex-wrap gap-1.5">
@@ -165,6 +181,8 @@ export function LayersPanel(p: Props) {
         </div>
         <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Postcode areas do not follow council borders. Flood overlay: river/sea risk in England only, no surface-water layer; absence of colour does not prove no risk.</p>
       </Group>
+
+      {!!p.availability?.length && <Group title="Data availability"><details><summary className="cursor-pointer text-[12px] text-muted">Sources awaiting access or coverage</summary><ul className="mt-2 space-y-3">{p.availability.map(d=><li key={d.id} className="text-[11.5px] text-muted"><strong className="block text-ink">{d.title}</strong>{d.reason} <a className="text-accent-text underline" href={d.url} target="_blank" rel="noreferrer">Source / official service</a></li>)}</ul></details></Group>}
 
       {p.showDetail && (
         <Group title="Detail level">

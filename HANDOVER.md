@@ -10,7 +10,7 @@ unbiased answers, not flattery.
 - Live: https://posty-teal.vercel.app (Vercel auto-deploys from that branch; production target).
 - Commit trailer used so far: `Co-Authored-By: …` and `Claude-Session: https://claude.ai/code/session_012tSne3s64b1hcjtCQBMhcs`. Never put a model name in commits/PRs.
 - Stack: Next.js 16 static export, React 19, TypeScript, Tailwind 4, MapLibre GL 5. No server, no database. Data = static chunked files in `public/data`.
-- Commands: `npx tsc --noEmit`, `npm test` (5 pass), `npx next build` (outputs `out/`), `npm run data:verify`.
+- Commands: `npx tsc --noEmit`, `npm test` (12 pass), `npx next build` (outputs `out/`), `npm run data:verify`.
 - Browser testing: Playwright + Chromium are preinstalled (`require('playwright')`); serve `out/` with `python3 -m http.server`. The sandbox can only reach npm, PyPI, raw.githubusercontent.com, Land Registry S3 and Overture S3. **Not** reachable: postcodes.io, Nomis (census), Ofcom, Environment Agency, police.uk, ONS geoportal, OpenFreeMap tiles (so the map shows the offline coastline basemap in tests).
 - Docs: `README.md`, `docs/DATA_SOURCES.md` (licensing — read it), `docs/ACCURACY*.md`, `docs/EXPANSION.md`.
 
@@ -69,3 +69,7 @@ EPC: `python3 pipeline/community.py --epc-csv /path/to/permitted.csv`, official 
 Validation: npm test 12 pass (all 30 metric ramps in both themes validated against MapLibre schema), TypeScript passes, static export passes, geometry verification passes. Real Chrome live QA and deployment outcome are recorded below after publication. No PR requested or created.
 
 Live Chrome validation after first deployment: rendered the recorded-crime map, searched SY1 and TF1, checked actual profile values, and compared all30 measures plus prices/IMD/growth. Browser found the options panel could exceed the viewport after a long definition: fixed with a scrollable desktop panel/sticky header, collapsible definitions, and hiding the colour key while options are open. Flood GetLegendGraphic returned image/png with CORS `*`; final overlay/menu smoke tests follow this fix. Vercel deployment of 91109ab succeeded.
+
+## Latest owner steering: left options sidebar
+
+Owner found the long dropdown menu laggy/hard to use and requested left-side options at15% width, with the map actually shrinking, and the earlier grouped buttons restored. Explorer now uses a flex workspace: desktop options `max(240px,15%)`, full-height scrolling and sticky close header; map/HUD live in the remaining width. Mobile retains the usable bottom sheet rather than a15%-wide panel. All measures are explicit buttons under their topic, no select/dropdown. MapController observes its container and resizes MapLibre on sidebar changes. High-frequency hover state moved into MapHover so pointer movement no longer rebuilds the whole menu; closed comparison rows are unmounted and selecting the already-active metric skips repaint. No width animation, avoiding repeated WebGL resizing.

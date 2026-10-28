@@ -5,7 +5,7 @@ import { APP_CONFIG, basemapById, type BasemapId, type Bounds } from '@/config/a
 import { PostcodeData } from '@/lib/data';
 import type { DetailMode } from '@/lib/levels';
 import { reverseGeocode } from '@/lib/lookup';
-import type { HoverInfo, MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
+import type { MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
 import type { BorderOptions, ColourMode, PlaceToggles, Theme } from '@/lib/mapLayers';
 import { areaOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
@@ -15,6 +15,7 @@ import { AboutDialog } from './AboutDialog';
 import { DetailsContent } from './DetailsPanel';
 import { AlertIcon, CheckIcon, CloseIcon } from './Icons';
 import { LayersPanel } from './LayersPanel';
+import { MapHover, type MapHoverHandle } from './MapHover';
 import { ColourKey } from './ColourKey';
 import { Legend } from './Legend';
 import { LevelBar } from './LevelBar';
@@ -99,7 +100,7 @@ export default function Explorer() {
   const [view, setView] = useState<MapViewState | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [stack, setStack] = useState<StackedUnit[] | null>(null);
-  const [hover, setHover] = useState<HoverInfo | null>(null);
+  const hoverCard = useRef<MapHoverHandle>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const [compared,setCompared]=useState<ComparedArea[]>([]);
   const [compareOpen,setCompareOpen]=useState(false);
@@ -197,7 +198,7 @@ export default function Explorer() {
           initialBounds: url.hasPosition ? undefined : (APP_CONFIG.homeRegion.bounds as Bounds),
           callbacks: {
             onState: (s) => { if (!cancelled) setView(s); },
-            onHover: (h) => { if (!cancelled) setHover(h); },
+            onHover: (h) => { if (!cancelled) hoverCard.current?.update(h); },
             onError: (m) => { if (!cancelled) showToast(m, 'error'); },
             onPick: (p: MapPick) => {
               if (cancelled || quizRef.current) return;
@@ -399,9 +400,15 @@ export default function Explorer() {
   const mobileBusy = isMobile && (!!panel || layersOpen || quizOpen);
 
   return (
-    <main className="fixed inset-0 overflow-hidden">
-      {data&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}}/>}
-      {!!compared.length&&<button onClick={()=>setCompareOpen(true)} className="absolute left-3 bottom-[140px] z-30 rounded-xl border border-line bg-surface px-3 py-2 text-[12px] text-ink shadow-float">Compare ({compared.length}/2)</button>}
+    <main className="fixed inset-0 flex overflow-hidden">
+      {layersOpen && !isMobile && (
+        <aside aria-label="Map options" className="relative z-30 h-full w-[max(240px,15%)] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-surface">
+          {layers}
+        </aside>
+      )}
+      <div className="relative h-full min-w-0 flex-1" aria-label="Map workspace">
+      {data&&compareOpen&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}}/>}
+      {!!compared.length&&<button onClick={()=>setCompareOpen(true)} className="absolute left-3 top-[124px] z-30 rounded-xl border border-line bg-surface px-3 py-2 text-[12px] text-ink shadow-float">Compare ({compared.length}/2)</button>}
       {/* MapLibre styles its container as position: relative, so it gets its own full-size element. */}
       <div className="absolute inset-0">
         <div ref={mapEl} className="h-full w-full" role="application" aria-label="Postcode map. Use arrow keys to pan and plus or minus to zoom." />
@@ -415,12 +422,7 @@ export default function Explorer() {
         </div>
       )}
 
-      {hover && !isMobile && !quizOpen && (
-        <div className="pointer-events-none absolute z-10 rounded-md border border-line bg-surface px-2 py-1 text-[12px] shadow-float" style={{ left: hover.x + 14, top: hover.y + 14 }}>
-          <div className="font-semibold text-ink">{hover.title}</div>
-          <div className="text-[11px] text-muted">{hover.subtitle}</div>
-        </div>
-      )}
+      <MapHover ref={hoverCard} active={!isMobile && !quizOpen} />
 
       <div className="pointer-events-none absolute inset-0 z-20">
         {!quizOpen && (
@@ -445,12 +447,6 @@ export default function Explorer() {
               onLayers={() => setLayersOpen((o) => !o)}
               onQuiz={openQuiz}
             />
-          </div>
-        )}
-
-        {layersOpen && !isMobile && (
-          <div className={`animate-in pointer-events-auto absolute bottom-8 max-h-[calc(100dvh-48px)] w-[340px] overflow-y-auto rounded-2xl border border-line bg-surface shadow-float ${selection && panel ? 'right-[448px]' : 'right-[64px]'}`}>
-            {layers}
           </div>
         )}
 
@@ -523,6 +519,7 @@ export default function Explorer() {
         {selection ? `Selected ${selection.kind === 'unit' ? 'postcode' : `postcode ${selection.kind}`} ${selection.code}` : ''}
       </div>
 
+      </div>
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} manifest={data?.manifest ?? null} />
     </main>
   );
