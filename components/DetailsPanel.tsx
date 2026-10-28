@@ -373,6 +373,10 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         <WhereItIs adm={(sel.kind === 'area' ? area!.adm : district!.adm)!} code={sel.code} kind={sel.kind} method={data.manifest.admin?.method} />
       )}
 
+      {(regionInfo?.im !== undefined || regionInfo?.pg !== undefined) && <Section title="Area insights">
+        {regionInfo?.im !== undefined && <p className="text-[13px] text-ink">English IMD 2025: mean decile <strong>{regionInfo.im.toFixed(1)}</strong> from {regionInfo.imn?.toLocaleString()} published postcode records. 1 is most deprived, 10 least. This weights postcodes, not residents; border regions show English records only.</p>}
+        {regionInfo?.pg !== undefined && <p className="mt-2 text-[13px] text-ink">Sale median change, {data.insights?.growth.baseYear} to {data.insights?.growth.year}: <strong>{regionInfo.pg>0?'+':''}{regionInfo.pg.toFixed(1)}%</strong> ({regionInfo.pgn?.join(' / ')} sales). Different properties sell each year; this is not individual property appreciation.</p>}
+      </Section>}
       {regionPrices && data.manifest.prices && <RegionPrices pp={regionPrices} period={data.manifest.prices} />}
 
       {sel.kind !== 'area' && (

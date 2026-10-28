@@ -139,6 +139,11 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
                 <p className="text-[12.5px]">{places.attribution}.</p>
               </Block>
             )}
+            <Block title="Deprivation and price change">
+              <p>English IMD 2025 comes from the official MHCLG postcode join, matched to this map’s postcode dataset. It shows a postcode-weighted mean LSOA decile, not a population-weighted score. 1 is most deprived and 10 least. Wales and Scotland have separate indices and are not compared; border regions represent English records only.</p>
+              <p>Price change compares the last two complete calendar years available within the sale extract, with at least 20 sales in each. Changes in the kinds of property sold affect the result; it is not an individual house-price growth estimate.</p>
+              <p>Source: MHCLG, English Indices of Deprivation 2025, licensed under the Open Government Licence v3.0. Grey means unavailable or insufficient data. The postcode provenance warning still applies.</p>
+            </Block>
             <Block title="Postcode points">
               <p>Each dot is the postcode’s official reference coordinate, not an address. Several postcodes (e.g. PO boxes, large businesses) can share one point.</p>
             </Block>

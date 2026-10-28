@@ -37,7 +37,9 @@ export interface AdminBreakdown { councils: [string, number][]; countries: [stri
  */
 export interface PriceSummary { n12: number; m12: number | null; n36: number; m36: number | null; type: Record<string, [number, number]>; year: Record<string, [number, number]> }
 /** Optional extras: share of postcodes that are urban (0–1) and count of recently introduced postcodes. */
-interface RegionExtras { pp?: PriceSummary; ur?: number; nw?: number }
+export interface InsightProps { im?: number; imn?: number; pg?: number; pgn?: [number, number] }
+export interface Insights { imd: { source: string; note: string }; growth: { baseYear: number; year: number; note: string }; groups: Record<string, InsightProps> }
+interface RegionExtras extends InsightProps { pp?: PriceSummary; ur?: number; nw?: number }
 export interface AreaInfo extends RegionExtras { c: string; name: string | null; n: number; nd: number; km2: number | null; b: BBox; l: [number, number]; detail: boolean; adm?: AdminBreakdown }
 export interface DistrictInfo extends RegionExtras { c: string; n: number; ns: number; km2: number | null; b: BBox; l: [number, number]; adm?: AdminBreakdown }
 
@@ -69,6 +71,7 @@ const UNIT_CACHE_LIMIT = 250;
 
 export class PostcodeData {
   manifest!: Manifest;
+  insights: Insights | null = null;
   areas = new Map<string, AreaInfo>();
   districts = new Map<string, DistrictInfo>();
   districtsByArea = new Map<string, DistrictInfo[]>();
@@ -85,11 +88,15 @@ export class PostcodeData {
   }
 
   async init(): Promise<void> {
-    const [manifest, index, areas] = await Promise.all([
+    const [manifest, index, areas, insights] = await Promise.all([
       this.fetchJson<Manifest>('manifest.json'),
       this.fetchJson<{ areas: AreaInfo[]; districts: DistrictInfo[] }>('index.json'),
       this.fetchJson<RegionCollection>('areas.geojson'),
+      this.fetchJson<Insights>('insights.json').catch(() => null),
     ]);
+    this.insights = insights;
+    for (const g of [...index.areas, ...index.districts]) Object.assign(g, insights?.groups[g.c] ?? {});
+    for (const f of areas.features) Object.assign(f.properties, insights?.groups[f.properties.c] ?? {});
     this.manifest = manifest;
     this.areasCollection = areas;
     for (const a of index.areas) this.areas.set(a.c, a);
@@ -106,7 +113,15 @@ export class PostcodeData {
     if (!p) {
       p = fetch(`${this.base}/${path}`).then((r) => {
         if (!r.ok) throw new DataError(`Couldn't load ${path} (HTTP ${r.status})`);
-        return r.json();
+        return r.json().then((value) => {
+          if (this.insights && path !== 'insights.json') {
+            const attach = (p: { c: string }) => Object.assign(p, this.insights?.groups[p.c] ?? {});
+            if (value.features) for (const f of value.features) if (f.properties?.c) attach(f.properties);
+            if (value.areas) value.areas.forEach(attach);
+            if (value.districts) value.districts.forEach(attach);
+          }
+          return value;
+        });
       });
       // Forget failures so a later attempt can retry.
       p.catch(() => this.json.delete(path));

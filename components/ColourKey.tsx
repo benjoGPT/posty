@@ -1,22 +1,27 @@
 'use client';
 
-import { densityStops, NO_DATA, priceStops, URBAN_STOPS, type ColourMode, type Theme } from '@/lib/mapLayers';
+import { insightStops, densityStops, NO_DATA, priceStops, URBAN_STOPS, type ColourMode, type Theme } from '@/lib/mapLayers';
 
 interface Props {
   colourMode: ColourMode;
   theme: Theme;
   priceScale?: number[] | null;
+  growthPeriod?: {baseYear: number; year: number};
 }
 
 const compact = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
 
 /** Always-visible key for the heat-map colour modes, so the colours can be read without opening the legend. */
-export function ColourKey({ colourMode, theme, priceScale }: Props) {
+export function ColourKey({ colourMode, theme, priceScale, growthPeriod }: Props) {
   let title: string;
   let colours: string[];
   let labels: string[];
   let noData = false;
-  if (colourMode === 'prices') {
+  if (colourMode === 'deprivation' || colourMode === 'growth') {
+    const stops=insightStops(colourMode,theme);
+    title=colourMode==='deprivation'?'English IMD 2025 · mean decile':`Sale medians ${growthPeriod?.baseYear ?? ''}–${growthPeriod?.year ?? ''}`;
+    colours=stops.map(([,c])=>c);labels=colourMode==='deprivation'?['1 · most','5.5','10 · least']:['−20%','0%','+20%'];noData=true;
+  } else if (colourMode === 'prices') {
     const stops = priceStops(theme, priceScale);
     title = 'Median house price';
     colours = stops.map(([, c]) => c);

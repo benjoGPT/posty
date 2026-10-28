@@ -376,7 +376,7 @@ export default function Explorer() {
       onBorders={changeBorders}
       places={prefs.places}
       onPlaces={changePlaces}
-      available={{ prices: !!data?.manifest.prices, urban: !!data?.manifest.extras?.urbanRural }}
+      available={{ prices: !!data?.manifest.prices, urban: !!data?.manifest.extras?.urbanRural, deprivation: !!data?.insights, growth: !!data?.insights && Object.values(data.insights.groups).some(g=>g.pg!==undefined) }}
       mode={mode}
       showDetail={isMobile}
       onBasemap={changeBasemap}
@@ -461,7 +461,7 @@ export default function Explorer() {
 
         {!quizOpen && !(isMobile && (panel || layersOpen)) && (
           <div className={`absolute ${isMobile ? 'top-[124px] right-3' : `top-3 ${selection && panel ? 'right-[392px]' : 'right-3'}`}`}>
-            <ColourKey colourMode={prefs.colourMode} theme={theme} priceScale={data?.manifest.prices?.stops} />
+            <ColourKey colourMode={prefs.colourMode} theme={theme} priceScale={data?.manifest.prices?.stops} growthPeriod={data?.insights?.growth} />
           </div>
         )}
 

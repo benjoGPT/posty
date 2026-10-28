@@ -11,7 +11,7 @@ import { ZOOM_CONFIG } from './levels';
 
 export type Theme = 'light' | 'dark';
 /** How region fills are coloured. */
-export type ColourMode = 'colours' | 'density' | 'prices' | 'urban' | 'outline';
+export type ColourMode = 'colours' | 'density' | 'prices' | 'deprivation' | 'growth' | 'urban' | 'outline';
 export type RegionLevel = Exclude<Level, 'units'>;
 export const REGION_LEVELS: RegionLevel[] = ['areas', 'districts', 'sectors'];
 
@@ -124,6 +124,12 @@ export const URBAN_STOPS = {
   light: [[0, '#e34948'], [0.5, '#f0efec'], [1, '#2a78d6']] as [number, string][],
   dark: [[0, '#e66767'], [0.5, '#383835'], [1, '#3987e5']] as [number, string][],
 };
+export const IMD_STOPS: [number,string][] = [[1,'#54278f'],[3,'#756bb1'],[5.5,'#9e9ac8'],[8,'#cbc9e2'],[10,'#f2f0f7']];
+export const GROWTH_STOPS: [number,string][] = [[-20,'#b35806'],[-10,'#e08214'],[0,'#f7f7f7'],[10,'#80cdc1'],[20,'#01665e']];
+export function insightStops(mode: 'deprivation'|'growth',theme: Theme): [number,string][] {
+ const stops=mode==='deprivation'?IMD_STOPS:GROWTH_STOPS;
+ return stops.map(([v,c])=>[v,theme==='dark'&&mode==='deprivation'?IMD_STOPS[IMD_STOPS.length-1-stops.findIndex(s=>s[0]===v)][1]:c]);
+}
 export const NO_DATA = { light: '#d6d5d1', dark: '#3a3a38' };
 
 const density: ExpressionSpecification = ['/', ['get', 'n'], ['max', ['coalesce', ['get', 'km2'], 1], 0.01]];
@@ -138,6 +144,10 @@ export function fillColour(mode: ColourMode, theme: Theme): ExpressionSpecificat
   if (mode === 'density') {
     return ['interpolate', ['linear'], ['ln', density], ...densityStops(theme).flatMap(([v, col]) => [Math.log(v), col])] as unknown as ExpressionSpecification;
   }
+  if (mode === 'deprivation' || mode === 'growth') {
+    const prop=mode==='deprivation'?'im':'pg';
+    return ['case',['has',prop],['interpolate',['linear'],['get',prop],...insightStops(mode,theme).flat()],NO_DATA[theme]] as unknown as ExpressionSpecification;
+  }
   if (mode === 'prices') {
     return ['case', ['has', 'pm'], ['interpolate', ['linear'], ['ln', ['get', 'pm']], ...priceStops(theme, priceValues).flatMap(([v, col]) => [Math.log(v), col])], NO_DATA[theme]] as unknown as ExpressionSpecification;
   }
@@ -149,7 +159,7 @@ export function fillColour(mode: ColourMode, theme: Theme): ExpressionSpecificat
 
 function fillBase(mode: ColourMode, theme: Theme): ExpressionSpecification {
   if (mode === 'colours') return theme === 'dark' ? ['case', hover, 0.45, 0.3] : ['case', hover, 0.4, 0.24];
-  if (mode === 'density' || mode === 'prices' || mode === 'urban') return ['case', hover, 0.8, 0.62];
+  if (mode === 'density' || mode === 'prices' || mode === 'urban' || mode === 'deprivation' || mode === 'growth') return ['case', hover, 0.8, 0.62];
   return ['case', hover, 0.13, 0.04];
 }
 

@@ -94,6 +94,8 @@ const { stats: sourceStats, meta: sourceMeta } = await adapter.load({
     urbanList.push(extra?.urban ?? null);
   },
 });
+fs.mkdirSync(path.join(ROOT, 'raw/derived'), {recursive:true});
+fs.writeFileSync(path.join(ROOT, 'raw/derived/current-postcodes.txt'), pcs.join('\n'));
 seen.clear();
 log(`Loaded ${pcs.length.toLocaleString()} live postcodes with coordinates (${JSON.stringify({ ...sourceStats, ...skipped })})`);
 

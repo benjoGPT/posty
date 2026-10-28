@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { APP_CONFIG, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
-import { DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type PlaceToggles } from '@/lib/mapLayers';
+import { IMD_STOPS, GROWTH_STOPS, DENSITY_STOPS, PLACE_STYLE, PRICE_STOPS, REGION_COLOURS, URBAN_STOPS, type BorderOptions, type ColourMode, type PlaceToggles } from '@/lib/mapLayers';
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   places: PlaceToggles;
   onPlaces: (p: PlaceToggles) => void;
   /** Colour modes whose data exists in this build. */
-  available: { prices: boolean; urban: boolean };
+  available: { prices: boolean; urban: boolean; deprivation: boolean; growth: boolean };
   mode: DetailMode;
   showDetail: boolean;
   onBasemap: (id: BasemapId) => void;
@@ -28,6 +28,8 @@ const COLOUR_MODES: { id: ColourMode; label: string; hint: string }[] = [
   { id: 'colours', label: 'Colours', hint: 'Neighbouring regions in different colours' },
   { id: 'density', label: 'Density', hint: 'Postcodes per km² — darker is denser' },
   { id: 'prices', label: 'House prices', hint: 'Median sale price, last 3 years (England & Wales) — darker is pricier' },
+  { id: 'deprivation', label: 'Deprivation', hint: 'English IMD 2025: average decile of published postcode records, 1 most deprived. English records only in border regions' },
+  { id: 'growth', label: 'Price change', hint: 'Change in sale medians between the last two complete calendar years; at least 20 sales per year. Not individual property appreciation' },
   { id: 'urban', label: 'Urban / rural', hint: 'Share of postcodes in urban areas — blue urban, red rural' },
   { id: 'outline', label: 'Outline', hint: 'Boundaries only' },
 ];
@@ -54,6 +56,8 @@ function ColourPreview({ mode }: { mode: ColourMode }) {
     mode === 'colours' ? REGION_COLOURS.light
     : mode === 'density' ? DENSITY_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
     : mode === 'prices' ? PRICE_STOPS.filter((_, i) => i % 2 === 0).map(([, c]) => c)
+    : mode === 'deprivation' ? IMD_STOPS.map(([,c])=>c)
+    : mode === 'growth' ? GROWTH_STOPS.map(([,c])=>c)
     : mode === 'urban' ? URBAN_STOPS.light.map(([, c]) => c)
     : ['transparent'];
   return (
@@ -94,7 +98,7 @@ export function LayersPanel(p: Props) {
 
       <Group title="Colour regions by">
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Colour regions by">
-          {COLOUR_MODES.filter((m) => (m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : true)).map((m) => {
+          {COLOUR_MODES.filter((m) => (m.id === 'prices' ? p.available.prices : m.id === 'urban' ? p.available.urban : m.id === 'deprivation' ? p.available.deprivation : m.id === 'growth' ? p.available.growth : true)).map((m) => {
             const on = m.id === p.colourMode;
             return (
               <button

@@ -45,6 +45,9 @@ jobs:
           DETAIL: ${{ inputs.detail }}
         run: npm run data:build -- --source onspd --input "$ONSPD_CSV" --detail "$DETAIL"
 
+      - name: Deprivation and complete-year price change
+        run: npm run data:insights
+
       - name: Nearby places (Overture Maps)
         run: npm run data:places
 

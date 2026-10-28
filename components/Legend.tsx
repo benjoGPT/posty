@@ -67,6 +67,8 @@ export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen
           <span>Colours only keep neighbouring regions apart; they don’t mean anything else.</span>
         </div>
       )}
+      {colourMode === 'deprivation' && <p className="mt-2 text-faint">English IMD 2025, postcode-weighted mean LSOA decile. Not a population-weighted score. Mixed-border regions show English records only. Grey means unavailable.</p>}
+      {colourMode === 'growth' && <p className="mt-2 text-faint">Two complete calendar years, minimum 20 sales each. Different properties sell each year; this is not individual property appreciation. Grey means insufficient data.</p>}
       {colourMode === 'prices' && (
         <p className="mt-2.5 border-t border-line pt-2 leading-snug text-faint">
           Colour steps are spread so each holds a similar number of districts. England &amp; Wales only; grey means no data or too few sales.

@@ -174,3 +174,17 @@ made from a non-official copy (the `uk-address-lookup` npm package, which states
 bundles ONSPD Feb 2026 but has an anonymous publisher and no source repository).
 The app shows a warning banner in that case. Rebuild from the official ONSPD
 download (see the README) before relying on the data.
+
+## Heat-map additions: English deprivation and sale-median change
+
+`npm run data:insights` downloads the **official MHCLG English Indices of Deprivation 2025 postcode join** from https://deprivation.communities.gov.uk/api/data-download-postcode. Source documentation: https://www.gov.uk/government/statistics/english-indices-of-deprivation-2025. Open Government Licence v3.0; source URL and archive SHA-256 are retained in `public/data/insights.json`.
+
+Run `data:build` first: it writes an ignored current-postcode membership file. Insights exclude records not present in that map dataset. The committed map is still the unverified ONS copy; matching an official deprivation source does not upgrade the postcode provenance. The GitHub Action rebuilds membership from official ONSPD before generating insights.
+
+Deprivation is the **mean of LSOA deciles weighted by matched postcode records**, not people, households, land area or unique LSOAs. Decile 1 is most deprived, 10 least. English records only, including in cross-border postal regions; Wales and Scotland remain grey because their indices are not comparable. Source postcode geography dates from the 2025 published join, so newer postcodes can be unmatched. Region sample counts are visible; missing values are never zero-filled. This is a descriptive map summary, not an official deprivation statistic for a postcode district.
+
+Price change compares 2024 and 2025 for the current extract, requiring at least 20 sales in each year. Both are complete calendar years in the input window. It deliberately excludes the partial 2023 and 2026 years. The metric is the percentage change between sale medians, not repeat-sales appreciation or the growth of a particular property. Composition and registration delays affect it. England/Wales only.
+
+`insights.json` is a small optional enrichment, merged by the client into area/district/sector properties; original boundaries and raw postcode coordinates are preserved. It is regenerated after data:build in the Action. Failure to load the optional file leaves the base map usable and hides these options.
+
+Population/age, recorded-crime rates, broadband and flood-risk filters remain unbuilt. No deprivation crime-domain rank is presented as an actual crime rate. A crime rate needs real monthly recorded-crime counts and a compatible population denominator, with explicit coverage and period.

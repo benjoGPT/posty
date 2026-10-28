@@ -54,3 +54,11 @@ Recommend telling the user to allow-list the missing hosts (Settings → environ
 - Official-ONSPD Action run (above); postcodes.io-powered "About this postcode" fields (deprivation etc.) live; Streets/Bright/Dark basemap styles visually (tiles blocked in sandbox).
 - Price coverage: medians from <5 sales hidden, <20 flagged; Scotland/NI grey.
 - Places data (postbox times, GPs) is volunteer/business-listing data, can be incomplete; official NHS/DfE/NaPTAN lists would be better.
+
+## Continuation: English deprivation and complete-year price change
+
+Added `pipeline/insights.mjs` / `insights.py` and optional `public/data/insights.json`. Build runs after `data:build` in the existing Action. The main build writes ignored `raw/derived/current-postcodes.txt`; the official MHCLG IMD 2025 postcode join is filtered against it before aggregation. Client enrichment adds `im` (mean decile), `imn` (matched postcode count), `pg` (% median-sale change), `pgn` (two sale counts). Modes, always-visible key, details, legend and About were extended. IMD is English-only, postcode-weighted, with explicit cross-border caveats. Price change uses two complete years with >=20 sales each, currently 2024–2025, not the incomplete 2023 base suggested earlier. It is not individual property appreciation.
+
+The original postcode-source warning is preserved. Population/age and recorded-crime rates are still next work, along with broadband/flood/EPC. Do not substitute an IMD crime-domain score for recorded-crime rates.
+
+Validation for this continuation: 7 tests pass, TypeScript passes, production static export passes, existing data verification passes. The managed preview launcher supplied Vite-style `--host` / `--strictPort` flags to Next.js and failed; the new controls have not been browser-verified in this environment. The new source matched 1,485,459 English postcode records against 1,745,685 current map-source records. The data provenance warning remains unchanged. No PR was created.
