@@ -10,6 +10,7 @@ import { CloseIcon, InfoIcon } from './Icons';
 interface Props {
   crime?: ReactNode;
   crimeRequest?: number;
+  onTabChange?:(tab:string)=>void;
   metrics?: MetricDefinition[];
   availability?: DataAvailability[];
   basemap: BasemapId;
@@ -90,6 +91,7 @@ const topicOf = (topic: string) => topic === 'Safety' ? 'Crime' : topic === 'Con
 export function LayersPanel(p: Props) {
   const prefix = useId();
   const [tab, setTab] = useState<PanelTab>('data');
+  useEffect(()=>{p.onTabChange?.(tab);},[tab,p.onTabChange]);
   const [topic, setTopic] = useState('Popular');
   useEffect(() => { if(p.crimeRequest)setTab('crime'); },[p.crimeRequest]);
   const [query, setQuery] = useState('');
@@ -98,7 +100,7 @@ export function LayersPanel(p: Props) {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('pc-options-view') ?? '{}');
-      if (TABS.some(t => t.id === saved.tab)) setTab(saved.tab);
+      if (!p.crimeRequest && TABS.some(t => t.id === saved.tab)) setTab(saved.tab);
       if (TOPICS.includes(saved.topic)) setTopic(saved.topic);
     } catch { /* optional preference */ }
   }, []);

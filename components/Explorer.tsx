@@ -100,6 +100,7 @@ export default function Explorer() {
   const theme = basemapById(prefs.basemap).theme as Theme;
   const [layersOpen, setLayersOpen] = useState(false);
   const [named,setNamed]=useState<NamedTarget|null>(null);
+  const [optionsTab,setOptionsTab]=useState('data');
   const [crimeRequest,setCrimeRequest]=useState(0);
   const [quizOpen, setQuizOpen] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -379,7 +380,7 @@ export default function Explorer() {
   }
 
   const level = view?.level ?? 'districts';
-  const panel = data && selection && !quizOpen && (
+  const panel = data && selection && !quizOpen && !(layersOpen&&optionsTab==='crime') && (
     <DetailsContent
       data={data}
       onCrime={openCrime}
@@ -407,6 +408,7 @@ export default function Explorer() {
   const layers = (
     <LayersPanel
       crimeRequest={crimeRequest}
+      onTabChange={setOptionsTab}
       crime={data?<CrimeExplorer data={data} selection={selection} named={named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={locateCrime}/>:<p className="p-4 text-[12px] text-muted">The map is loading…</p>}
       basemap={prefs.basemap}
       colourMode={prefs.colourMode}
@@ -455,7 +457,7 @@ export default function Explorer() {
         {!quizOpen && (
           <div className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 left-3 flex flex-col gap-2 md:right-auto" style={{maxWidth: !isMobile && selection && panel ? 'calc(100% - 408px)' : 'calc(100% - 24px)'}}>
             <SearchBox ref={search} data={data} onNavigate={searchNavigate} recent={prefs.recent} onClearRecent={() => updatePrefs({ recent: [] })} />
-            <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} compact={isMobile} onOpenOptions={() => setLayersOpen(true)} />
+            <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} compact={isMobile} onOpenOptions={() => {setCrimeRequest(0);setLayersOpen(true);}} />
           </div>
         )}
 
@@ -471,7 +473,7 @@ export default function Explorer() {
               onHome={() => ctrl.current?.fitBounds(APP_CONFIG.homeRegion.bounds as Bounds, padding(!!selection))}
               onUk={() => ctrl.current?.fitBounds(APP_CONFIG.ukBounds as Bounds, padding(!!selection))}
               onLocate={locate}
-              onLayers={() => setLayersOpen((o) => !o)}
+              onLayers={() => {setCrimeRequest(0);setLayersOpen((o) => !o);}}
               onQuiz={openQuiz}
             />
           </div>

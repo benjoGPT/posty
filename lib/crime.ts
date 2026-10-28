@@ -22,7 +22,7 @@ export interface CrimeScope {
 }
 const API = 'https://data.police.uk/api';
 const cache = new Map<string,unknown>();
-export const crimeLabel = (value: string) => value === 'anti-social-behaviour' ? 'Anti-social behaviour' : value.split('-').map((s,i)=>i?s:s.charAt(0).toUpperCase()+s.slice(1)).join(' ');
+export const crimeLabel = (value: string) => value === 'violent-crime' ? 'Violence and sexual offences' : value === 'criminal-damage-arson' ? 'Criminal damage and arson' : value === 'anti-social-behaviour' ? 'Anti-social behaviour' : value.split('-').map((s,i)=>i?s:s.charAt(0).toUpperCase()+s.slice(1)).join(' ');
 export const monthLabel = (month: string) => /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'}) : month;
 export const forceLabel = (force: string) => force.split('-').map(w=>w==='and'?'and':w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
 async function json<T>(url: string, signal?: AbortSignal): Promise<T> {
