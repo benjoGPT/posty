@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test pipeline/test/*.test.mjs",
     "data:land": "node pipeline/land.mjs",
+    "data:admin": "node --max-old-space-size=4096 pipeline/admin.mjs",
     "data:glyphs": "node pipeline/glyphs.mjs",
     "data:build": "node --max-old-space-size=8192 pipeline/build.mjs",
     "data:verify": "node pipeline/verify.mjs",

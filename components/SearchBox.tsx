@@ -13,6 +13,7 @@ interface Props {
   onNavigate: (target: NavTarget) => Promise<NavResult>;
   /** Recently opened searches, newest first, shown while the box is empty. */
   recent: NavTarget[];
+  onClearRecent: () => void;
 }
 
 export interface SearchBoxHandle {
@@ -21,7 +22,7 @@ export interface SearchBoxHandle {
 
 const KIND_LABEL: Record<Suggestion['kind'], string> = { area: 'Area', district: 'District', sector: 'Sector', unit: 'Postcode' };
 
-export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({ data, onNavigate, recent }, ref) {
+export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({ data, onNavigate, recent, onClearRecent }, ref) {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(-1);
@@ -133,6 +134,13 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
               </span>
             </li>
           ))}
+          {!query.trim() && (
+            <li role="presentation" className="flex justify-end border-t border-line px-3.5 pt-1.5 pb-1">
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); onClearRecent(); }} className="text-[12px] font-medium text-muted hover:text-ink">
+                Clear recent searches
+              </button>
+            </li>
+          )}
         </ul>
       )}
 

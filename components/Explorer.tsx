@@ -6,7 +6,7 @@ import { PostcodeData } from '@/lib/data';
 import type { DetailMode } from '@/lib/levels';
 import { reverseGeocode } from '@/lib/lookup';
 import type { HoverInfo, MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
-import type { ColourMode, Theme } from '@/lib/mapLayers';
+import type { BorderOptions, ColourMode, Theme } from '@/lib/mapLayers';
 import { areaOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
 import { readUrlState, writeUrlState } from '@/lib/url';
@@ -31,8 +31,8 @@ function useIsMobile() {
 }
 
 // Per-viewer conveniences kept in localStorage (all optional).
-interface Prefs { basemap: BasemapId; colourMode: ColourMode; warningDismissed: boolean; recent: NavTarget[] }
-const DEFAULT_PREFS: Prefs = { basemap: 'light', colourMode: 'colours', warningDismissed: false, recent: [] };
+interface Prefs { basemap: BasemapId; colourMode: ColourMode; borders: BorderOptions; recent: NavTarget[] }
+const DEFAULT_PREFS: Prefs = { basemap: 'light', colourMode: 'colours', borders: { countries: true, councils: false }, recent: [] };
 
 function loadPrefs(): Prefs {
   try {
@@ -42,6 +42,7 @@ function loadPrefs(): Prefs {
       ...DEFAULT_PREFS,
       ...raw,
       basemap: basemapById(raw.basemap ?? (legacyDark ? 'dark' : 'light')).id,
+      borders: { ...DEFAULT_PREFS.borders, ...raw.borders },
       recent: Array.isArray(raw.recent) ? raw.recent.slice(0, 6) : [],
     };
   } catch {
@@ -175,26 +176,34 @@ export default function Explorer() {
       if (cancelled || !mapEl.current) return;
       const { MapController } = await import('@/lib/mapController');
       if (cancelled || !mapEl.current) return;
-      controller = await MapController.create(mapEl.current, d, {
-        basemap: initialPrefs.basemap,
-        colourMode: initialPrefs.colourMode,
-        mode: url.detail,
-        initialBounds: url.hasPosition ? undefined : (APP_CONFIG.homeRegion.bounds as Bounds),
-        callbacks: {
-          onState: (s) => { if (!cancelled) setView(s); },
-          onHover: (h) => { if (!cancelled) setHover(h); },
-          onError: (m) => { if (!cancelled) showToast(m, 'error'); },
-          onPick: (p: MapPick) => {
-            if (cancelled || quizRef.current) return;
-            if (!p) { if (!mobileRef.current) select(null); return; }
-            if (p.kind === 'units') {
-              const u = p.units[0];
-              select({ kind: 'unit', code: u.code, lng: u.lng, lat: u.lat, status: 'live', origin: 'local', quality: u.q });
-              setStack(p.units.length > 1 ? p.units : null);
-            } else select({ kind: p.kind, code: p.code });
+      try {
+        controller = await MapController.create(mapEl.current, d, {
+          basemap: initialPrefs.basemap,
+          colourMode: initialPrefs.colourMode,
+          borders: initialPrefs.borders,
+          mode: url.detail,
+          initialBounds: url.hasPosition ? undefined : (APP_CONFIG.homeRegion.bounds as Bounds),
+          callbacks: {
+            onState: (s) => { if (!cancelled) setView(s); },
+            onHover: (h) => { if (!cancelled) setHover(h); },
+            onError: (m) => { if (!cancelled) showToast(m, 'error'); },
+            onPick: (p: MapPick) => {
+              if (cancelled || quizRef.current) return;
+              if (!p) { if (!mobileRef.current) select(null); return; }
+              if (p.kind === 'units') {
+                const u = p.units[0];
+                select({ kind: 'unit', code: u.code, lng: u.lng, lat: u.lat, status: 'live', origin: 'local', quality: u.q });
+                setStack(p.units.length > 1 ? p.units : null);
+              } else select({ kind: p.kind, code: p.code });
+            },
           },
-        },
-      });
+        });
+      } catch (e) {
+        // MapLibre needs WebGL; very old devices or locked-down browsers may not have it.
+        const msg = (e as Error).message ?? '';
+        if (!cancelled) setFatal(/webgl/i.test(msg) ? 'Your browser or device can’t display interactive maps (WebGL is unavailable or turned off). Try another browser or enable hardware acceleration.' : `The map couldn’t start: ${msg}`);
+        return;
+      }
       if (cancelled) { controller.destroy(); return; }
       ctrl.current = controller;
       setData(d);
@@ -231,6 +240,7 @@ export default function Explorer() {
       if (e.key === '/' && !typing) { e.preventDefault(); search.current?.focus(); }
       if (e.key === 'Escape' && !typing) {
         setLayersOpen(false);
+        if (quizRef.current) setQuizOpen(false);
         if (selectionRef.current) select(null);
       }
     };
@@ -242,6 +252,11 @@ export default function Explorer() {
     updatePrefs({ basemap: id });
     document.documentElement.dataset.theme = basemapById(id).theme;
     void ctrl.current?.setBasemap(id);
+  };
+
+  const changeBorders = (b: BorderOptions) => {
+    updatePrefs({ borders: b });
+    ctrl.current?.setBorders(b);
   };
 
   const changeColourMode = (m: ColourMode) => {
@@ -333,11 +348,12 @@ export default function Explorer() {
       onClose={() => select(null)}
     />
   );
-  const showWarning = data && !data.manifest.source.verified && !prefs.warningDismissed && !quizOpen;
   const layers = (
     <LayersPanel
       basemap={prefs.basemap}
       colourMode={prefs.colourMode}
+      borders={prefs.borders}
+      onBorders={changeBorders}
       mode={mode}
       showDetail={isMobile}
       onBasemap={changeBasemap}
@@ -375,18 +391,8 @@ export default function Explorer() {
       <div className="pointer-events-none absolute inset-0 z-20">
         {!quizOpen && (
           <div className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 left-3 flex flex-col gap-2 md:right-auto">
-            <SearchBox ref={search} data={data} onNavigate={searchNavigate} recent={prefs.recent} />
+            <SearchBox ref={search} data={data} onNavigate={searchNavigate} recent={prefs.recent} onClearRecent={() => updatePrefs({ recent: [] })} />
             <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} compact={isMobile} onOpenOptions={() => setLayersOpen(true)} />
-            {showWarning && (
-              <div role="note" className="pointer-events-auto flex max-w-[380px] items-start gap-2 self-start rounded-lg border border-line bg-warn-soft px-3 py-2 text-[12px] leading-snug text-warn shadow-float">
-                <AlertIcon width={15} height={15} className="mt-px shrink-0" />
-                <span>
-                  {isMobile ? 'Unofficial copy of ONS data.' : 'Postcode records come from an unofficial copy of ONS data (cross-checked).'}{' '}
-                  <button onClick={() => setAboutOpen(true)} className="font-semibold underline">Details</button>
-                </span>
-                <button onClick={() => updatePrefs({ warningDismissed: true })} aria-label="Dismiss" className="-mr-1 grid size-6 shrink-0 place-items-center opacity-70 hover:opacity-100"><CloseIcon width={14} height={14} /></button>
-              </div>
-            )}
           </div>
         )}
 
@@ -416,7 +422,17 @@ export default function Explorer() {
 
         {!mobileBusy && !quizOpen && (
           <div className="absolute bottom-10 left-3 md:bottom-8">
-            <Legend key={String(isMobile)} level={level} basemap={view?.basemap ?? 'hosted'} colourMode={prefs.colourMode} theme={theme} defaultOpen={!isMobile} />
+            <Legend
+              key={String(isMobile)}
+              level={level}
+              basemap={view?.basemap ?? 'hosted'}
+              colourMode={prefs.colourMode}
+              borders={prefs.borders}
+              theme={theme}
+              defaultOpen={!isMobile}
+              unofficialData={!!data && !data.manifest.source.verified}
+              onAbout={() => setAboutOpen(true)}
+            />
           </div>
         )}
 
@@ -452,6 +468,11 @@ export default function Explorer() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Screen-reader announcement of the current selection. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {selection ? `Selected ${selection.kind === 'unit' ? 'postcode' : `postcode ${selection.kind}`} ${selection.code}` : ''}
       </div>
 
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} manifest={data?.manifest ?? null} />

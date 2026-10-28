@@ -2,20 +2,23 @@
 
 import { useState } from 'react';
 import { LEVEL_LABELS, LEVELS, type Level } from '@/lib/levels';
-import { densityStops, REGION_COLOURS, type ColourMode, type Theme } from '@/lib/mapLayers';
+import { densityStops, PALETTE, REGION_COLOURS, type BorderOptions, type ColourMode, type Theme } from '@/lib/mapLayers';
 import { LayersIcon } from './Icons';
 
 interface Props {
   level: Level;
   basemap: 'hosted' | 'offline';
   colourMode: ColourMode;
+  borders: BorderOptions;
   theme: Theme;
   defaultOpen: boolean;
+  unofficialData: boolean;
+  onAbout: () => void;
 }
 
 const fmt = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
 
-export function Legend({ level, basemap, colourMode, theme, defaultOpen }: Props) {
+export function Legend({ level, basemap, colourMode, borders, theme, defaultOpen, unofficialData, onAbout }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   if (!open) {
     return (
@@ -78,9 +81,32 @@ export function Legend({ level, basemap, colourMode, theme, defaultOpen }: Props
         </div>
       )}
 
+      {(borders.countries || borders.councils) && (
+        <ul className="mt-2.5 space-y-1 border-t border-line pt-2 text-muted">
+          {borders.countries && (
+            <li className="flex items-center gap-2.5">
+              <svg width="16" height="6" aria-hidden><line x1="0" y1="3" x2="16" y2="3" stroke={PALETTE[theme].countryLine} strokeWidth="2.5" strokeDasharray="5 2.5" /></svg>
+              Country border
+            </li>
+          )}
+          {borders.councils && (
+            <li className="flex items-center gap-2.5">
+              <svg width="16" height="6" aria-hidden><line x1="0" y1="3" x2="16" y2="3" stroke={PALETTE[theme].councilLine} strokeWidth="1.5" strokeDasharray="3 3" /></svg>
+              Council boundary
+            </li>
+          )}
+        </ul>
+      )}
+
       <p className="mt-2 border-t border-line pt-2 leading-snug text-muted">
         Boundaries are <strong className="font-semibold text-ink">approximate</strong>, derived from postcode reference points. Dots are official reference points, not addresses.
       </p>
+      {unofficialData && (
+        <p className="mt-1.5 leading-snug text-faint">
+          Data: unofficial copy of ONS February 2026, cross-checked.{' '}
+          <button onClick={onAbout} className="font-medium text-accent-text underline-offset-2 hover:underline">Details</button>
+        </p>
+      )}
       {basemap === 'offline' && <p className="mt-1.5 leading-snug text-warn">Basemap unavailable — showing coastline only.</p>}
     </section>
   );

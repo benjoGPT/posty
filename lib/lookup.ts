@@ -26,12 +26,6 @@ export interface TerminatedPostcode {
   latitude: number | null;
 }
 
-export interface OutcodeInfo {
-  outcode: string;
-  admin_district: string[];
-  admin_county: string[];
-  country: string[];
-}
 
 export type LookupResult =
   | { status: 'live'; data: LivePostcode }
@@ -100,15 +94,6 @@ export async function autocomplete(partial: string, signal?: AbortSignal): Promi
   }
 }
 
-/** Administrative areas that a postcode district (outcode) overlaps. */
-export async function lookupOutcode(outcode: string): Promise<OutcodeInfo | null | 'unavailable'> {
-  try {
-    const r = await cached(`oc:${outcode}`, () => get<OutcodeInfo>(`/outcodes/${encodeURIComponent(outcode)}`));
-    return r.body;
-  } catch {
-    return 'unavailable';
-  }
-}
 
 /** Nearest live postcode to a point (UK-wide). Resolves null if none within ~2 km, 'unavailable' on failure. */
 export async function reverseGeocode(lng: number, lat: number): Promise<LivePostcode | null | 'unavailable'> {

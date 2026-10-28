@@ -1,0 +1,58 @@
+name: Build postcode data from official ONSPD
+
+# Run manually: GitHub → Actions → "Build postcode data from official ONSPD" → Run workflow.
+# Downloads the ONS Postcode Directory, rebuilds public/data, verifies and
+# cross-checks it, and commits the result to the branch you run it on.
+on:
+  workflow_dispatch:
+    inputs:
+      onspd_url:
+        description: ONSPD zip download link (leave empty to use the latest release automatically)
+        required: false
+        default: ''
+      detail:
+        description: Areas with sector and postcode detail (comma separated, or "all")
+        required: false
+        default: SY,TF,WV,DY
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download ONSPD
+        env:
+          ONSPD_URL: ${{ inputs.onspd_url }}
+        run: node pipeline/fetch-onspd.mjs "$ONSPD_URL"
+
+      - name: Build data
+        env:
+          DETAIL: ${{ inputs.detail }}
+        run: npm run data:build -- --source onspd --input "$ONSPD_CSV" --detail "$DETAIL"
+
+      - name: Verify
+        run: npm run data:verify
+
+      - name: Cross-check against independent sources
+        run: npm run data:crosscheck -- --source onspd --input "$ONSPD_CSV"
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data docs/ACCURACY_REPORT.md
+          RELEASE=$(node -p "require('./public/data/manifest.json').source.release")
+          git commit -m "Rebuild postcode data from official $RELEASE" || { echo "No changes to commit"; exit 0; }
+          git push

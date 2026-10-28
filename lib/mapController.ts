@@ -8,8 +8,8 @@ import type { BBox, PostcodeData, RegionCollection, RegionFeature, UnitFeature }
 import { containsPoint, featureContains, intersects } from './data';
 import { FALLBACK_THRESHOLDS, LEVEL_LABELS, levelForZoom, thresholdsFor, type DetailMode, type Level, type Thresholds } from './levels';
 import {
-  applyColourMode, computeWindows, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
-  type ColourMode, type RegionLevel, type Theme,
+  applyBorders, applyColourMode, BORDER_SOURCES, computeWindows, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
+  type BorderOptions, type ColourMode, type RegionLevel, type Theme,
 } from './mapLayers';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
@@ -36,6 +36,7 @@ interface Callbacks {
 interface ControllerOptions {
   basemap: BasemapId;
   colourMode: ColourMode;
+  borders: BorderOptions;
   mode: DetailMode;
   initialBounds?: Bounds;
   callbacks: Callbacks;
@@ -94,6 +95,7 @@ export class MapController {
   private hoverQueued: MapMouseEvent | null = null;
   private destroyed = false;
   private labelsHidden = false;
+  private bordersLoaded = { countries: false, councils: false };
   private refreshSeq = 0;
 
   static async create(
@@ -175,6 +177,8 @@ export class MapController {
     this.sourceKeys = {};
     this.visibility = {};
     this.hovered = null;
+    this.bordersLoaded = { countries: false, councils: false };
+    this.applyBordersNow();
     this.applyWindows();
     this.render();
     this.applySelection();
@@ -199,6 +203,23 @@ export class MapController {
     if (!this.map.getLayer('units-circle')) return;
     applyColourMode(this.map, mode, this.theme);
     this.applyWindows();
+  }
+
+  setBorders(b: BorderOptions): void {
+    this.opts.borders = b;
+    this.applyBordersNow();
+  }
+
+  /** Loads border data the first time it's shown (councils are ~300 KB), then toggles the layers. */
+  private applyBordersNow(): void {
+    if (!this.map.getSource(BORDER_SOURCES.countries)) return;
+    for (const k of ['countries', 'councils'] as const) {
+      if (this.opts.borders[k] && !this.bordersLoaded[k]) {
+        this.bordersLoaded[k] = true;
+        (this.map.getSource(BORDER_SOURCES[k]) as GeoJSONSource).setData(`${this.data.baseUrl}/${k === 'countries' ? 'borders' : 'councils'}.geojson`);
+      }
+    }
+    applyBorders(this.map, this.opts.borders);
   }
 
   /** Hides postcode labels (used by the quiz). */
@@ -458,6 +479,8 @@ export class MapController {
     const e = this.hoverQueued;
     this.hoverQueued = null;
     if (!e || this.destroyed || !this.map.getLayer('units-circle')) return;
+    // Hit-testing during a pan/zoom is wasted work and makes the tooltip jitter.
+    if (this.map.isMoving()) { this.clearHover(); return; }
     const unit = this.unitsAt(e.point.x, e.point.y, 5)[0];
     const f = unit ?? this.regionAt(e.point);
     const id = f ? String(f.properties.c) : null;

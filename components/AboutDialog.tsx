@@ -111,6 +111,15 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
               <p>{manifest.boundaries.description}</p>
               <p>Coastline: {manifest.boundaries.coastline}.</p>
             </Block>
+            {manifest.admin && (
+              <Block title="Council and country borders">
+                <p>
+                  Councils: {manifest.admin.councils}. {manifest.admin.borders}. The “Where it is” breakdowns are{' '}
+                  {manifest.admin.method === 'onspd' ? 'taken from each postcode’s council code in ONSPD.' : 'estimated by placing each postcode in these council boundaries.'}
+                </p>
+                <p className="text-[12.5px]">{manifest.admin.attribution}.</p>
+              </Block>
+            )}
             <Block title="Postcode points">
               <p>Each dot is the postcode’s official reference coordinate, not an address. Several postcodes (e.g. PO boxes, large businesses) can share one point.</p>
             </Block>

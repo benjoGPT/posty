@@ -22,12 +22,15 @@ export interface Manifest {
     warning?: string;
   };
   boundaries: { method: string; description: string; coastline: string };
+  admin?: { method: 'onspd' | 'boundaries'; councils: string; borders: string; attribution: string };
   coverage: { outline: 'all'; detailAreas: string[]; includesNorthernIreland: boolean; note: string | null };
   counts: { postcodes: number; areas: number; districts: number; sectors: number; detailPostcodes: number };
 }
 
-export interface AreaInfo { c: string; name: string | null; n: number; nd: number; km2: number | null; b: BBox; l: [number, number]; detail: boolean }
-export interface DistrictInfo { c: string; n: number; ns: number; km2: number | null; b: BBox; l: [number, number] }
+/** Postcode counts by council and by country (largest first). */
+export interface AdminBreakdown { councils: [string, number][]; countries: [string, number][] }
+export interface AreaInfo { c: string; name: string | null; n: number; nd: number; km2: number | null; b: BBox; l: [number, number]; detail: boolean; adm?: AdminBreakdown }
+export interface DistrictInfo { c: string; n: number; ns: number; km2: number | null; b: BBox; l: [number, number]; adm?: AdminBreakdown }
 
 export interface RegionProps { c: string; n: number; name?: string | null; nd?: number; ns?: number; km2?: number; b?: BBox; label?: boolean; a?: string; d?: string }
 export type RegionFeature = Feature<Polygon | MultiPolygon | Point, RegionProps>;
@@ -53,6 +56,11 @@ export class PostcodeData {
   private units = new Map<string, Promise<UnitFeature[]>>();
 
   constructor(private base = APP_CONFIG.dataBaseUrl) {}
+
+  /** Absolute base URL of the data files (MapLibre needs absolute URLs). */
+  get baseUrl(): string {
+    return this.base.startsWith('http') ? this.base : `${window.location.origin}${this.base}`;
+  }
 
   async init(): Promise<void> {
     const [manifest, index, areas] = await Promise.all([

@@ -68,8 +68,9 @@ export async function load({ input, onRecord }) {
           lat: pickColumn(h, ['lat']),
           lng: pickColumn(h, ['long', 'lng', 'lon']),
           doterm: pickColumn(h, ['doterm']),
-          grid: pickColumn(h, ['osgrdind'], false),
+          grid: pickColumn(h, ['osgrdind', 'gridind'], false),
           ctry: pickColumn(h, [/^ctry(\d\dcd)?$/], false),
+          lad: pickColumn(h, ['oslaua', /^lad\d\dcd$/], false),
         };
         continue;
       }
@@ -80,7 +81,7 @@ export async function load({ input, onRecord }) {
       const grid = cols.grid >= 0 ? Number(f[cols.grid]) : null;
       // ONSPD uses lat 99.999999 / grid indicator 9 for postcodes without a grid reference.
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat > 90 || grid === 9) { stats.noLocation++; continue; }
-      onRecord(f[cols.pc], lat, lng, { quality: grid, country: cols.ctry >= 0 ? f[cols.ctry] : null });
+      onRecord(f[cols.pc], lat, lng, { quality: grid, country: cols.ctry >= 0 ? f[cols.ctry] : null, lad: cols.lad >= 0 ? f[cols.lad] : null });
     }
   }
   return {

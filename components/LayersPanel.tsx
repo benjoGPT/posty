@@ -3,12 +3,14 @@
 import type { ReactNode } from 'react';
 import { APP_CONFIG, type BasemapId } from '@/config/app';
 import { LEVEL_LABELS, LEVELS, type DetailMode } from '@/lib/levels';
-import { DENSITY_STOPS, REGION_COLOURS, type ColourMode } from '@/lib/mapLayers';
+import { DENSITY_STOPS, REGION_COLOURS, type BorderOptions, type ColourMode } from '@/lib/mapLayers';
 import { CloseIcon, InfoIcon } from './Icons';
 
 interface Props {
   basemap: BasemapId;
   colourMode: ColourMode;
+  borders: BorderOptions;
+  onBorders: (b: BorderOptions) => void;
   mode: DetailMode;
   showDetail: boolean;
   onBasemap: (id: BasemapId) => void;
@@ -49,7 +51,7 @@ export function LayersPanel(p: Props) {
     <div className="text-ink">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <h2 className="text-[14px] font-semibold">Map options</h2>
-        <button onClick={p.onClose} aria-label="Close map options" className="grid size-8 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
+        <button onClick={p.onClose} aria-label="Close map options" className="grid size-11 md:size-8 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
           <CloseIcon />
         </button>
       </div>
@@ -91,6 +93,31 @@ export function LayersPanel(p: Props) {
           })}
         </div>
         <p className="mt-2 text-[11.5px] leading-snug text-muted">{COLOUR_MODES.find((m) => m.id === p.colourMode)?.hint}.</p>
+      </Group>
+
+      <Group title="Borders">
+        <div className="space-y-1">
+          {([
+            ['countries', 'Country borders', 'England, Wales and Scotland'],
+            ['councils', 'Council boundaries', 'Local authorities, with names'],
+          ] as const).map(([key, label, hint]) => (
+            <label key={key} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-1 py-1.5 hover:bg-surface-hover">
+              <span>
+                <span className="block text-[13px] font-medium text-ink">{label}</span>
+                <span className="block text-[11.5px] text-muted">{hint}</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={p.borders[key]}
+                onChange={(e) => p.onBorders({ ...p.borders, [key]: e.target.checked })}
+                className="peer sr-only"
+              />
+              <span aria-hidden className="relative h-6 w-10 shrink-0 rounded-full bg-line transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-4" />
+            </label>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-muted">Postcode areas don’t follow these borders — SY reaches deep into Wales.</p>
       </Group>
 
       {p.showDetail && (

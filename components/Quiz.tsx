@@ -35,7 +35,10 @@ function makeQuestion(data: PostcodeData, kind: QuizKind, previous?: string): Qu
   const pool =
     kind === 'areas'
       ? [...data.areas.values()].filter((a) => a.km2 && a.n > 500).map((a) => ({ c: a.c, l: a.l }))
-      : [...data.districts.values()].filter((d) => data.isDetailArea(areaOf(d.c)) && d.km2 && d.n >= 50).map((d) => ({ c: d.c, l: d.l }));
+      : [...data.districts.values()]
+          // Districts numbered 90+ (e.g. SY99, WV99) are mostly non-geographic: PO boxes and large users.
+          .filter((d) => data.isDetailArea(areaOf(d.c)) && d.km2 && d.n >= 50 && Number(d.c.replace(/^[A-Z]+/, '').replace(/\D.*$/, '')) < 90)
+          .map((d) => ({ c: d.c, l: d.l }));
   let target = pool[Math.floor(Math.random() * pool.length)];
   if (target.c === previous && pool.length > 1) target = pool.find((p) => p.c !== previous)!;
   const near = pool
@@ -100,6 +103,19 @@ export function Quiz({ data, controller, padding, restoreMode, onExit }: Props) 
     controller.setLabelsHidden(false);
   };
 
+  // Keyboard: 1–4 answers, Enter or N for the next question.
+  useEffect(() => {
+    if (!kind || !q) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest('input, textarea')) return;
+      const n = Number(e.key);
+      if (!picked && n >= 1 && n <= q.options.length) { e.preventDefault(); answer(q.options[n - 1]); }
+      else if (picked && (e.key === 'Enter' || e.key.toLowerCase() === 'n')) { e.preventDefault(); show(kind, q.answer); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const label = (code: string) => (kind === 'areas' ? `${code}${data.areas.get(code)?.name ? ` · ${data.areas.get(code)!.name}` : ''}` : code);
   const fact = (code: string) => {
     const info = kind === 'areas' ? data.areas.get(code) : data.districts.get(code);
@@ -139,7 +155,10 @@ export function Quiz({ data, controller, padding, restoreMode, onExit }: Props) 
 
       {kind && q && (
         <>
-          <p className="mb-2.5 text-[13.5px] text-ink">Which postcode {kind === 'areas' ? 'area' : 'district'} is highlighted?</p>
+          <p className="mb-2.5 text-[13.5px] text-ink">
+            Which postcode {kind === 'areas' ? 'area' : 'district'} is highlighted?
+            <span className="hidden text-faint md:inline"> Press 1–4.</span>
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {q.options.map((o) => {
               const isAnswer = o === q.answer;

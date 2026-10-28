@@ -32,7 +32,8 @@ postcode.
 - **Map styles**: Light, Streets, Bright, Dark and Minimal (offline)
 - **Find my nearest postcode** (device location), nearby postcodes, "Open in Google Maps"
 - **Postcode quiz**: name the highlighted district or area, with score and best streak
-- Recent searches; Home and "View entire UK" controls; legend; level indicator
+- **Borders**: England/Wales/Scotland borders and council boundaries, plus a **“Where it is”** breakdown for every area and district (e.g. SY: 67% England, 33% Wales; 63% Shropshire, 21% Powys…)
+- Recent searches; Home and "View entire UK" controls; legend; level indicator; installable as an app on phones
 - Phone-friendly: compact top bar, draggable bottom sheets, large touch targets, no accidental iOS zoom
 - Shareable URLs: `/?pc=SY1+1AD#map=16.5/52.7055/-2.7506`
 - Works without the basemap or postcodes.io: falls back to an offline coastline map
@@ -51,6 +52,15 @@ Open http://localhost:3000. The repository includes a pre-built dataset in
 `public/data` (see the note on data provenance below).
 
 ## Get the official data and rebuild
+
+**Easiest: GitHub Actions (no setup).** In GitHub, open **Actions → “Build postcode
+data from official ONSPD” → Run workflow**, choose your branch and press Run. It
+finds the latest ONSPD on the ONS portal (or uses a download link you paste in),
+rebuilds `public/data`, verifies and cross-checks it, and commits the result.
+Vercel then redeploys automatically. Once built from the official file, the
+“unofficial copy” notes disappear from the app.
+
+**Or on your own computer:**
 
 1. Download the latest **ONSPD** from the ONS Open Geography Portal:
    https://geoportal.statistics.gov.uk → search "ONS Postcode Directory" → newest
@@ -78,7 +88,8 @@ detail; `--include-ni` includes Northern Ireland (read the licensing note first)
 Defaults live in `pipeline/config.json`.
 
 One-off reference steps, only needed when upgrading those inputs:
-`npm run data:land` (coastline) and `npm run data:glyphs` (label fonts).
+`npm run data:land` (coastline), `npm run data:admin` (council and country
+borders) and `npm run data:glyphs` (label fonts).
 
 ## Deploy
 

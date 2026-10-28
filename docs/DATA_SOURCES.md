@@ -9,6 +9,8 @@
 | Coastline | OpenStreetMap via `@geo-maps/countries-land-100m` | ODbL 1.0 | Clipping approximate boundaries at the coast; offline fallback basemap |
 | Basemap | [OpenFreeMap](https://openfreemap.org) (OpenMapTiles schema) | Data ODbL (© OpenStreetMap contributors); free, no key, commercial use allowed | Background map |
 | Area names | Royal Mail postcode area names, hand-compiled (`pipeline/reference/postcode-areas.json`) | Factual list | Labels such as "SY · Shrewsbury" |
+| Council boundaries | ONS Local Authority Districts, December 2021, ultra-generalised (via the ONS data-visualisation team's GitHub, `ONSvisual/topojson_boundaries`) | Open Government Licence v3.0 | Council overlay; “Where it is” breakdown when the source has no council codes |
+| National borders | ONS Local Authority Districts 2013, generalised (via `martinjc/UK-GeoJSON`), dissolved to countries | Open Government Licence v3.0 | England–Wales and England–Scotland border lines |
 | Label fonts | Noto Sans (via `@fontsource/noto-sans`) | SIL OFL 1.1 | Self-hosted map label glyphs (`public/fonts`) |
 
 ## Why ONSPD
@@ -66,6 +68,18 @@ The app labels these as **approximate** everywhere they appear. Measured agreeme
 points lie inside their own sector shape and **99.3 %** inside their own district
 shape. The rest sit near edges, at shared reference points, or are absorbed
 outliers.
+
+## Councils and countries (“Where it is”)
+
+Each postcode is assigned to a council: exactly, from the council code in ONSPD
+when building from the official file; otherwise by placing its reference point in
+the ONS council boundaries (generalised to roughly 500 m, so postcodes very close
+to a council border can be misplaced, which shifts shares by well under 1%).
+Areas and districts then show the share of their postcodes in each council and
+country. Council boundaries reflect December 2021, so the April 2023 mergers
+(Cumberland, Westmorland and Furness, North Yorkshire, Somerset) aren't drawn;
+Shropshire and all Welsh councils are unaffected. National borders come from a
+more detailed (2013) ONS file — those borders haven't changed.
 
 ## Map colours
 

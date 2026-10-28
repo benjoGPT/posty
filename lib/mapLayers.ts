@@ -41,6 +41,9 @@ export const PALETTE = {
     fallbackLand: '#f7f6f3',
     fallbackCoast: '#c5d0dc',
     neutralLine: '#4b5565',
+    countryLine: '#3a2f63',
+    councilLine: '#5d6474',
+    councilLabel: '#5d4f8c',
   },
   dark: {
     accent: '#7aa7ff',
@@ -57,6 +60,9 @@ export const PALETTE = {
     fallbackLand: '#1a2232',
     fallbackCoast: '#2c3850',
     neutralLine: '#c3cad8',
+    countryLine: '#e9e3ff',
+    councilLine: '#a7b0c2',
+    councilLabel: '#c9bfff',
   },
 } as const;
 
@@ -252,6 +258,18 @@ export function applyColourMode(map: MlMap, mode: ColourMode, theme: Theme): voi
   map.setPaintProperty('sectors-tint', 'fill-color', fillColour(mode, theme));
 }
 
+export interface BorderOptions { countries: boolean; councils: boolean }
+export const BORDER_SOURCES = { countries: 'pc-borders', councils: 'pc-councils' } as const;
+
+/** Shows or hides the border overlay layers. */
+export function applyBorders(map: MlMap, b: BorderOptions): void {
+  const set = (id: string, on: boolean) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  set('border-country', b.countries);
+  set('border-country-casing', b.countries);
+  set('border-council', b.councils);
+  set('border-council-label', b.councils);
+}
+
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 
 /** Adds postcode sources and layers to the current style (idempotent). */
@@ -261,6 +279,9 @@ export function installPostcodeLayers(map: MlMap, theme: Theme, mode: ColourMode
     if (!map.getSource(SOURCE[l])) {
       map.addSource(SOURCE[l], { type: 'geojson', data: EMPTY, promoteId: 'c', attribution: l === 'areas' ? attribution : undefined, buffer: 64, tolerance: 0.3 });
     }
+  }
+  for (const id of Object.values(BORDER_SOURCES)) {
+    if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY, attribution: id === BORDER_SOURCES.councils ? 'Council boundaries: ONS (OGL v3)' : undefined });
   }
   // Fills and lines go beneath the basemap's own labels; our labels go on top.
   const firstSymbol = map.getStyle().layers.find((x) => x.type === 'symbol' && !x.id.startsWith('pc-'))?.id;
@@ -283,6 +304,23 @@ export function installPostcodeLayers(map: MlMap, theme: Theme, mode: ColourMode
       paint: { 'line-color': lineColour(mode, theme), 'line-width': ['case', hover, 2, 0.9], 'line-opacity': 0 },
     }, true);
   }
+  // Borders sit above the postcode lines so the national border stays readable.
+  add({
+    id: 'border-council', type: 'line', source: BORDER_SOURCES.councils, minzoom: 6, filter: ['==', ['get', 'kind'], 'council'],
+    layout: { 'line-join': 'round', visibility: 'none' },
+    paint: { 'line-color': c.councilLine, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.6, 12, 1.4], 'line-dasharray': [2, 2], 'line-opacity': 0.85 },
+  }, true);
+  add({
+    id: 'border-country-casing', type: 'line', source: BORDER_SOURCES.countries,
+    layout: { 'line-join': 'round', 'line-cap': 'round', visibility: 'none' },
+    paint: { 'line-color': c.halo, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 12, 6], 'line-opacity': 0.7 },
+  }, true);
+  add({
+    id: 'border-country', type: 'line', source: BORDER_SOURCES.countries,
+    layout: { 'line-join': 'round', 'line-cap': 'round', visibility: 'none' },
+    paint: { 'line-color': c.countryLine, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.3, 12, 3], 'line-dasharray': [3, 1.5] },
+  }, true);
+
   for (const l of REGION_LEVELS) {
     add({
       id: `${l}-selected-fill`, type: 'fill', source: SOURCE[l], filter: ['all', notLabel, ['==', ['get', 'c'], '']],
@@ -334,6 +372,20 @@ export function installPostcodeLayers(map: MlMap, theme: Theme, mode: ColourMode
     id: 'sectors-label', type: 'symbol', source: SOURCE.sectors, filter: isLabel,
     layout: { 'text-field': ['get', 'c'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 10, 11, 13, 14], 'text-padding': 4 },
     paint: { 'text-color': c.label, 'text-opacity': 0, ...halo },
+  });
+  add({
+    id: 'border-council-label', type: 'symbol', source: BORDER_SOURCES.councils, minzoom: 7.5, maxzoom: 12.5, filter: ['==', ['get', 'kind'], 'council-label'],
+    layout: {
+      visibility: 'none',
+      'text-field': ['get', 'name'],
+      'text-font': FONT_REGULAR,
+      'text-size': ['interpolate', ['linear'], ['zoom'], 7.5, 10, 11, 12],
+      'text-transform': 'uppercase',
+      'text-letter-spacing': 0.08,
+      'text-max-width': 9,
+      'text-padding': 8,
+    },
+    paint: { 'text-color': c.councilLabel, ...halo },
   });
   add({
     id: 'units-label', type: 'symbol', source: SOURCE.units, minzoom: ZOOM_CONFIG.unitLabelZoom,

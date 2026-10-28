@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { PostcodeData, RegionProps } from '@/lib/data';
+import type { AdminBreakdown, PostcodeData, RegionProps } from '@/lib/data';
 import { LEVEL_LABELS } from '@/lib/levels';
-import { lookupOutcode, lookupPostcode, type LookupResult, type OutcodeInfo } from '@/lib/lookup';
+import { lookupPostcode, type LookupResult } from '@/lib/lookup';
 import type { StackedUnit } from '@/lib/mapController';
 import { areaOf, compareCodes, districtOf, sectorOf } from '@/lib/postcode';
 import type { RegionKind, Selection } from '@/lib/search';
@@ -67,7 +67,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 function CodeLink({ code, sub, onClick }: { code: string; sub?: string | null; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group -mx-1 inline-flex items-center gap-1 rounded px-1 text-left hover:bg-surface-hover">
+    <button onClick={onClick} className="group -mx-1 inline-flex min-h-8 items-center gap-1 rounded px-1 text-left hover:bg-surface-hover">
       <span className="pc-code font-semibold whitespace-pre text-accent-text">{code}</span>
       {sub && <span className="text-muted">· {sub}</span>}
       <ChevronRight width={14} height={14} className="text-faint group-hover:text-accent-text" />
@@ -79,7 +79,7 @@ function ActionButton({ onClick, icon, children, primary }: { onClick: () => voi
   return (
     <button
       onClick={onClick}
-      className={`flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium whitespace-nowrap transition-colors ${
+      className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 md:h-9 text-[12.5px] font-medium whitespace-nowrap transition-colors ${
         primary ? 'bg-accent text-white hover:opacity-90 dark:text-[#0c1220]' : 'border border-line text-ink hover:bg-surface-hover'
       }`}
     >
@@ -99,7 +99,7 @@ function Header({ eyebrow, title, badge, onClose }: { eyebrow: string; title: Re
         </div>
         <h2 className="pc-code mt-0.5 truncate text-[24px] leading-tight font-semibold tracking-tight text-ink">{title}</h2>
       </div>
-      <button onClick={onClose} aria-label="Close details" className="-mr-1.5 grid size-8 shrink-0 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
+      <button onClick={onClose} aria-label="Close details" className="-mr-1.5 grid size-11 shrink-0 md:size-8 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
         <CloseIcon />
       </button>
     </div>
@@ -227,6 +227,61 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
   );
 }
 
+// Categorical slots from the validated palette (orange / aqua / blue / violet), not flag colours:
+// red vs green is the pair colour-blind readers most often can't tell apart.
+const COUNTRY_COLOUR: Record<string, string> = { England: '#eb6834', Wales: '#1baf7a', Scotland: '#2a78d6', 'Northern Ireland': '#6250d6' };
+
+function share(n: number, total: number): string {
+  const p = (100 * n) / total;
+  return p < 1 ? '<1%' : `${Math.round(p)}%`;
+}
+
+/** Which countries and councils a postcode area/district covers, by share of its postcodes. */
+function WhereItIs({ adm, code, kind, method }: { adm: AdminBreakdown; code: string; kind: RegionKind; method?: 'onspd' | 'boundaries' }) {
+  const total = adm.countries.reduce((s, [, n]) => s + n, 0);
+  if (!total) return null;
+  const multi = adm.countries.length > 1;
+  return (
+    <Section
+      title="Where it is"
+      note={
+        <>
+          Share of the {kind === 'area' ? 'area’s' : 'district’s'} postcodes in each council
+          {method === 'boundaries' ? ', estimated from ONS council boundaries' : ' (ONS data)'}. Postcode {kind}s ignore council and national borders.
+        </>
+      }
+    >
+      {multi && (
+        <div className="mb-2.5">
+          <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={adm.countries.map(([c, n]) => `${c} ${share(n, total)}`).join(', ')}>
+            {adm.countries.map(([c, n]) => <span key={c} style={{ width: `${(100 * n) / total}%`, background: COUNTRY_COLOUR[c] ?? '#888' }} />)}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 text-[12px] text-ink">
+            {adm.countries.map(([c, n]) => (
+              <span key={c} className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full" style={{ background: COUNTRY_COLOUR[c] ?? '#888' }} aria-hidden />
+                {c} <span className="tabular text-muted">{share(n, total)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {!multi && <p className="mb-1.5 text-[12.5px] text-ink">All of {code} is in {adm.countries[0][0]}.</p>}
+      <ul className="space-y-1">
+        {adm.councils.map(([name, n]) => (
+          <li key={name} className="flex items-center gap-2 text-[12.5px]">
+            <span className="min-w-0 flex-1 truncate text-ink">{name}</span>
+            <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+              <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(2, (100 * n) / total)}%` }} />
+            </span>
+            <span className="tabular w-9 text-right text-muted">{share(n, total)}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
 // -----------------------------------------------------------------------------
 
 function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose }: Props & { sel: { kind: RegionKind; code: string } }) {
@@ -234,7 +289,6 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
   const area = data.areas.get(areaCode);
   const district = sel.kind === 'area' ? undefined : data.districts.get(districtOf(sel.code));
   const sectors = useAsync(() => data.loadSectors(areaCode), [areaCode]);
-  const outcode = useAsync<OutcodeInfo | null | 'unavailable'>(() => (sel.kind === 'district' ? lookupOutcode(sel.code) : Promise.resolve(null)), [sel.code, sel.kind]);
   const sectorProps: RegionProps | undefined = sectors?.features.find((f) => !f.properties.label && f.properties.c === sel.code)?.properties;
   const level = KIND_LEVEL[sel.kind];
 
@@ -277,6 +331,16 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         <ActionButton onClick={onShare} icon={<LinkIcon width={15} height={15} />}>Share</ActionButton>
       </div>
 
+      {sel.kind === 'area' && (
+        <p className="mx-4 mb-3 text-[12px] leading-snug text-muted">
+          Postcode areas are named after their main post town, not a county{area?.name ? ` — ${sel.code} is the ${area.name} area` : ''}.
+        </p>
+      )}
+
+      {(sel.kind === 'area' ? area?.adm : sel.kind === 'district' ? district?.adm : undefined) && (
+        <WhereItIs adm={(sel.kind === 'area' ? area!.adm : district!.adm)!} code={sel.code} kind={sel.kind} method={data.manifest.admin?.method} />
+      )}
+
       {sel.kind !== 'area' && (
         <Section title="Part of">
           <dl>
@@ -290,7 +354,7 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         <Section title={`Contains ${children.label}`}>
           <div className="flex max-h-[132px] flex-wrap gap-1.5 overflow-auto">
             {children.codes.map((c) => (
-              <button key={c} onClick={() => onNavigate({ kind: children!.kind, code: c })} className="pc-code rounded-md border border-line px-2 py-0.5 text-[12px] font-medium text-ink hover:border-accent hover:text-accent-text">
+              <button key={c} onClick={() => onNavigate({ kind: children!.kind, code: c })} className="pc-code rounded-md border border-line px-2.5 py-1.5 text-[12.5px] font-medium text-ink md:px-2 md:py-0.5 md:text-[12px] hover:border-accent hover:text-accent-text">
                 {c}
               </button>
             ))}
@@ -298,20 +362,6 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         </Section>
       )}
 
-      {sel.kind === 'district' && (
-        <Section title="Local authorities" note="Councils whose areas overlap this postcode district, from postcodes.io. Postal and administrative boundaries differ.">
-          {outcode === undefined && <div className="h-3.5 w-2/3 animate-pulse rounded bg-surface-2" />}
-          {outcode === 'unavailable' && <p className="text-[12.5px] text-muted">Not available: couldn’t reach postcodes.io.</p>}
-          {outcode === null && <p className="text-[12.5px] text-muted">No details found.</p>}
-          {outcode && outcode !== 'unavailable' && (
-            <dl>
-              <Row label="Local authority">{outcode.admin_district.join(', ') || '—'}</Row>
-              {outcode.admin_county.length > 0 && <Row label="County">{outcode.admin_county.join(', ')}</Row>}
-              <Row label="Country">{outcode.country.join(', ')}</Row>
-            </dl>
-          )}
-        </Section>
-      )}
 
       {area && !area.detail && sel.kind !== 'area' && (
         <p className="mx-4 mb-3 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-snug text-muted">

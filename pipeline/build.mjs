@@ -26,6 +26,7 @@ import path from 'node:path';
 import mapshaper from 'mapshaper';
 import { normalisePostcode, splitPostcode, compareCodes } from './lib/postcode.mjs';
 import { adjacency, colourGraph } from './lib/colour.mjs';
+import { polygonIndex } from './lib/pip.mjs';
 import { absorbFragments, buildSites, triangulate, dissolve, toLngLat } from './lib/voronoi.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -69,6 +70,7 @@ const pcs = [];
 const lngList = [];
 const latList = [];
 const qualityList = [];
+const ladList = [];
 const seen = new Set();
 const skipped = { invalid: 0, duplicate: 0, northernIreland: 0 };
 
@@ -85,6 +87,7 @@ const { stats: sourceStats, meta: sourceMeta } = await adapter.load({
     lngList.push(lng);
     latList.push(lat);
     qualityList.push(extra?.quality ?? null);
+    ladList.push(extra?.lad ?? null);
   },
 });
 seen.clear();
@@ -152,6 +155,53 @@ for (let i = 0; i < pcs.length; i++) {
 }
 
 // ---------------------------------------------------------------------------
+// 2b. Administrative breakdown: which councils and countries each postcode
+//     area/district covers. ONSPD carries each postcode's council code, which
+//     is exact; otherwise postcodes are placed in generalised ONS council
+//     boundaries (accurate except within a few hundred metres of a border).
+// ---------------------------------------------------------------------------
+const councils = JSON.parse(fs.readFileSync(path.join(ROOT, 'pipeline/reference/councils.geojson'), 'utf8')).features;
+const councilName = new Map(councils.map((f) => [f.properties.c, f.properties.name]));
+// Councils created after the 2021 boundaries (April 2023 reorganisation).
+for (const [c, n] of Object.entries({ E06000063: 'Cumberland', E06000064: 'Westmorland and Furness', E06000065: 'North Yorkshire', E06000066: 'Somerset' })) {
+  if (!councilName.has(c)) councilName.set(c, n);
+}
+const COUNTRY = { E: 'England', W: 'Wales', S: 'Scotland', N: 'Northern Ireland' };
+const locateCouncil = polygonIndex(councils);
+const recordCouncil = new Array(pcs.length).fill(null);
+let adminExact = 0, adminLocated = 0;
+for (let i = 0; i < pcs.length; i++) {
+  const code = ladList[i];
+  if (code && /^[EWSN]0\d{7}$/.test(code)) { recordCouncil[i] = code; adminExact++; continue; }
+  const idx = locateCouncil(lngs[i], lats[i]);
+  if (idx >= 0) { recordCouncil[i] = councils[idx].properties.c; adminLocated++; }
+}
+const adminMethod = adminExact > adminLocated ? 'onspd' : 'boundaries';
+log(`Councils: ${fmtPct(adminExact)} from ONSPD codes, ${fmtPct(adminLocated)} from boundaries, ${fmtPct(pcs.length - adminExact - adminLocated)} unplaced`);
+function fmtPct(n) { return `${((100 * n) / pcs.length).toFixed(1)}%`; }
+
+function tallyBy(groupOf, nGroups) {
+  const councilsT = Array.from({ length: nGroups }, () => new Map());
+  for (let i = 0; i < pcs.length; i++) {
+    const c = recordCouncil[i];
+    if (!c) continue;
+    const t = councilsT[groupOf(i)];
+    t.set(c, (t.get(c) ?? 0) + 1);
+  }
+  return councilsT.map((t) => {
+    const countries = new Map();
+    for (const [c, n] of t) countries.set(COUNTRY[c[0]], (countries.get(COUNTRY[c[0]]) ?? 0) + n);
+    const sorted = [...t].sort((a, b) => b[1] - a[1]);
+    return {
+      councils: sorted.slice(0, 10).map(([c, n]) => [councilName.get(c) ?? c, n]),
+      countries: [...countries].sort((a, b) => b[1] - a[1]),
+    };
+  });
+}
+const adminArea = tallyBy((i) => districtAreaId[sectorDistrict[recordSector[i]]], areaCodes.length);
+const adminDistrict = tallyBy((i) => sectorDistrict[recordSector[i]], districtCodes.length);
+
+// ---------------------------------------------------------------------------
 // 3. Voronoi + dissolve
 // ---------------------------------------------------------------------------
 const sites = buildSites(lngs, lats, recordSector);
@@ -204,7 +254,7 @@ if (!includeNI) {
   }
 }
 
-async function finish(features, interval) {
+async function finish(features, interval, precision = 0.00001) {
   const out = await mapshaper.applyCommands(
     [
       '-i polys.json',
@@ -212,7 +262,7 @@ async function finish(features, interval) {
       `-simplify interval=${interval} keep-shapes`,
       '-each "b=this.bounds.map(v => Math.round(v * 1e5) / 1e5), km2=Math.round(this.area / 1e4) / 100"',
       '-points inner + name=labels',
-      '-o format=geojson precision=0.00001 target=*',
+      `-o format=geojson precision=${precision} target=*`,
     ].join(' '),
     { 'polys.json': { type: 'FeatureCollection', features }, 'land.json': land },
   );
@@ -236,11 +286,13 @@ function features(polygons, codes, props, include = () => true) {
 const areasOut = await finish(
   features(levels.areas, areaCodes, (i) => ({ name: areaNames[areaCodes[i]] ?? null, n: countArea[i], nd: districtsPerArea[i], k: colourOf.areas[i] })),
   config.simplifyMetres.areas,
+  0.0001,
 );
 log(`Areas: ${areasOut.polygons.length} polygons`);
 const districtsOut = await finish(
   features(levels.districts, districtCodes, (i) => ({ a: districtArea[i], n: countDistrict[i], ns: sectorsPerDistrict[i], k: colourOf.districts[i] })),
   config.simplifyMetres.districts,
+  0.0001,
 );
 log(`Districts: ${districtsOut.polygons.length} polygons`);
 const sectorsOut = await finish(
@@ -326,6 +378,7 @@ writeJson('index.json', {
     b: areaPoly.get(c)?.properties.b ?? finiteBox(boxArea[i]),
     l: areaLabel.get(c)?.geometry.coordinates ?? meanPoint(boxArea[i]),
     detail: isDetail(c),
+    adm: adminArea[i],
   })),
   districts: districtCodes.map((c, i) => ({
     c,
@@ -334,6 +387,7 @@ writeJson('index.json', {
     km2: distPoly.get(c)?.properties.km2 ?? null,
     b: distPoly.get(c)?.properties.b ?? finiteBox(boxDistrict[i]),
     l: distLabel.get(c)?.geometry.coordinates ?? meanPoint(boxDistrict[i]),
+    adm: { ...adminDistrict[i], councils: adminDistrict[i].councils.slice(0, 6) },
   })),
 });
 
@@ -343,6 +397,27 @@ const landOut = await mapshaper.applyCommands(
   { 'land.json': land },
 );
 fs.writeFileSync(path.join(outDir, 'land.geojson'), landOut['land.json']);
+
+// Borders overlay: council boundaries (lines between councils), council name
+// points and the national land borders.
+{
+  const councilFc = { type: 'FeatureCollection', features: councils };
+  const out = await mapshaper.applyCommands(
+    ['-i councils.json', '-innerlines + name=lines', '-target councils', '-points inner + name=labels', '-o format=geojson precision=0.0001 target=lines,labels'].join(' '),
+    { 'councils.json': councilFc },
+  );
+  const linesRaw = JSON.parse(out['lines.json']);
+  const lineGeoms = linesRaw.features ? linesRaw.features.map((f) => f.geometry) : linesRaw.geometries;
+  const borders = JSON.parse(fs.readFileSync(path.join(ROOT, 'pipeline/reference/country-borders.geojson'), 'utf8')).features;
+  writeJson('borders.geojson', { type: 'FeatureCollection', features: borders });
+  writeJson('councils.geojson', {
+    type: 'FeatureCollection',
+    features: [
+      ...lineGeoms.map((geometry) => ({ type: 'Feature', properties: { kind: 'council' }, geometry })),
+      ...JSON.parse(out['labels.json']).features.map((f) => ({ type: 'Feature', properties: { kind: 'council-label', name: f.properties.name }, geometry: f.geometry })),
+    ],
+  });
+}
 
 const detailAreas = areaCodes.filter(isDetail);
 writeJson('manifest.json', {
@@ -357,6 +432,12 @@ writeJson('manifest.json', {
     absorbedOutliers: absorbed,
     absorbFragmentsUpTo: config.absorbFragmentsUpTo,
     simplifyMetres: config.simplifyMetres,
+  },
+  admin: {
+    method: adminMethod,
+    councils: 'ONS Local Authority Districts (December 2021), ultra-generalised; April 2023 changes in Cumbria, North Yorkshire and Somerset not shown on the map',
+    borders: 'National borders from ONS Local Authority Districts (2013, generalised)',
+    attribution: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0. Contains OS data © Crown copyright and database right',
   },
   coverage: {
     outline: 'all',
