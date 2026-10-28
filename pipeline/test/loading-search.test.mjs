@@ -8,7 +8,7 @@ function rowsFor(query){const q=names.normaliseName(query);const keys=new Set([n
 test('named search finds actual GB streets, places and Welsh alternatives without mistaking them for postcode areas',()=>{
  for(const q of ['Shrewsbury','Birmingham','Caerdydd','St Ives']){const r=names.rankNamed(rowsFor(q),q);assert.ok(r.some(x=>x.kind==='place'),q);}
  assert.match(names.rankNamed(rowsFor('Shrewsbury'),'Shrewsbury')[0].subtitle,/^Town/);
- const results=names.rankNamed(rowsFor('High Street Shrewsbury'),'High Street Shrewsbury');assert.ok(results.some(r=>r.kind==='street'&&r.title==='High Street'&&r.subtitle.includes('Shrewsbury')));for(const r of results){assert.ok(r.lat>49&&r.lat<61);assert.ok(r.lng>-9&&r.lng<3);}
+ const results=names.rankNamed(rowsFor('High Street Shrewsbury'),'High Street Shrewsbury');assert.ok(results.some(r=>r.kind==='street'&&r.title==='High Street'&&r.subtitle.includes('Shrewsbury')));assert.ok(!results.some(r=>r.subtitle.includes('High Peak')));assert.ok(names.rankNamed(rowsFor('Shrewsbury High Street'),'Shrewsbury High Street').some(r=>r.title==='High Street'));for(const r of results){assert.ok(r.lat>49&&r.lat<61);assert.ok(r.lng>-9&&r.lng<3);}
  assert.deepEqual(names.rankNamed(rowsFor('Shrewsbury'),'qzxnonexistentplace'),[]);
 });
 test('bootstrap is small and regional loading restores statistics, prices and administrative details',async()=>{

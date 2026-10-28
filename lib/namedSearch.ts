@@ -32,6 +32,13 @@ export function rankNamed(rows: NameRow[], query: string): NamedTarget[] {
     if(!normalised){const name=normaliseName(r[1]),alt=normaliseName(r[2]);normalised={name,alt,haystack:`${name} ${alt} ${normaliseName(r[3])} ${normaliseName(r[5])}`};normalisedRows.set(r,normalised);}
     const {name,alt,haystack} = normalised;
     if (!words.every(w => haystack.includes(w)) || !Number.isFinite(r[6]) || !Number.isFinite(r[7])) continue;
+    const context = `${normaliseName(r[3])} ${normaliseName(r[5])}`;
+    let phraseMatches = false;
+    for(let start=0;start<words.length&&!phraseMatches;start++) for(let end=words.length;end>start;end--){
+      const phrase=words.slice(start,end).join(' ');
+      if((name.includes(phrase)||alt.includes(phrase)) && [...words.slice(0,start),...words.slice(end)].every(w=>context.includes(w))){phraseMatches=true;break;}
+    }
+    if(!phraseMatches)continue;
     const score = name === q || alt === q ? 100 : name.startsWith(q) || alt.startsWith(q) ? 80 : words.every(w=>name.includes(w)||alt.includes(w)) ? 60 : 40;
     const value: NamedTarget = { kind:r[4], code:r[0], title:r[1], subtitle:`${r[5]} · ${r[3]}`, lng:r[6], lat:r[7] };
     if (!unique.has(r[0]) || unique.get(r[0])!.score < score) unique.set(r[0], {score:score+(/^(City|Town)$/.test(r[5])?10:r[4]==='place'&&r[5]!=='Railway Station'?8:r[4]==='place'?1:0),value});
@@ -39,6 +46,7 @@ export function rankNamed(rows: NameRow[], query: string): NamedTarget[] {
   return [...unique.values()].sort((a,b)=>b.score-a.score||a.value.title.localeCompare(b.value.title)||a.value.subtitle.localeCompare(b.value.subtitle)).slice(0,8).map(x=>x.value);
 }
 export async function searchNamed(query: string, base: string, signal?: AbortSignal): Promise<NamedTarget[]> {
+  if(/^\s*\d+[a-z]?\s+/i.test(query))return [];
   const words = normaliseName(query).split(' ').filter(w=>w.length>=2);
   if (!words.length || (normaliseName(query).length<3 && !/^[abm]\d{1,4}$/.test(normaliseName(query))) || signal?.aborted) return [];
   const prefixes=[normaliseName(query).slice(0,3),...words.filter(w=>w.length>=3).slice(0,4)];

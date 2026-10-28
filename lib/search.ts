@@ -97,7 +97,7 @@ export async function suggest(query: string, data: PostcodeData, signal?: AbortS
       for (const pc of await autocomplete(compact, signal)) add({ kind: 'unit', code: pc, title: pc, subtitle: 'Postcode · via postcodes.io' });
     }
   }
-  if ((normaliseName(query).length >= 3 && !/^[A-Z]{1,2}[0-9]/.test(compact)) || /^[ABM]\d{1,4}$/.test(compact)) {
+  if ((normaliseName(query).length >= 3 && (!/^[A-Z]{1,2}[0-9]/.test(compact) || out.length === 0)) || /^[ABM]\d{1,4}$/.test(compact)) {
     const named = await searchNamed(query, data.baseUrl, signal).catch((error: Error) => { if (out.length) return []; throw error; });
     return (/^[ABM]\d{1,4}$/.test(compact) ? [...out,...named] : [...named,...out]).slice(0,MAX);
   }
@@ -172,6 +172,7 @@ export type QueryResolution =
 export async function resolveQuery(query: string, data: PostcodeData): Promise<QueryResolution> {
   const q = cleanQuery(query);
   if (!q) return { ok: false, message: 'Type a postcode, place or street name.' };
+  if(/^\s*\d+[a-z]?\s+/i.test(query))return {ok:false,message:'House-number search isn’t available. Try the street and town, or a postcode.'};
   const unit = normaliseUnit(q);
   if (unit) return { ok: true, target: { kind: 'unit', code: unit } };
   const compact = q.replace(/ /g, '');
