@@ -28,7 +28,12 @@ postcode.
 - Click any region or postcode for details: hierarchy, coordinates, positional quality,
   administrative geography, data source and release, copy and share buttons
 - Desktop side panel, mobile draggable bottom sheet
-- Light and dark themes, Home and "View entire UK" controls, legend, level indicator
+- **Colour coding**: regions in four colours so neighbours never match, or shaded by postcode density, or outlines only
+- **Map styles**: Light, Streets, Bright, Dark and Minimal (offline)
+- **Find my nearest postcode** (device location), nearby postcodes, "Open in Google Maps"
+- **Postcode quiz**: name the highlighted district or area, with score and best streak
+- Recent searches; Home and "View entire UK" controls; legend; level indicator
+- Phone-friendly: compact top bar, draggable bottom sheets, large touch targets, no accidental iOS zoom
 - Shareable URLs: `/?pc=SY1+1AD#map=16.5/52.7055/-2.7506`
 - Works without the basemap or postcodes.io: falls back to an offline coastline map
   and local search
@@ -60,6 +65,13 @@ npm run data:build -- --source onspd --input raw/ONSPD_FEB_2026_UK.csv
 ```bash
 npm run data:verify
 ```
+
+```bash
+npm run data:crosscheck -- --source onspd --input raw/ONSPD_FEB_2026_UK.csv
+```
+
+The cross-check compares the data with independent sources and writes
+`docs/ACCURACY_REPORT.md` and `public/data/crosscheck.json` (shown in the app).
 
 Options: `--detail SY,TF,WV,DY` (or `all`) sets which areas get sector and postcode
 detail; `--include-ni` includes Northern Ireland (read the licensing note first).
@@ -136,3 +148,4 @@ described above.
 
 - [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md): sources, licences, attribution, limitations
 - [docs/EXPANSION.md](docs/EXPANSION.md): adding regions, a national build, hosting, updates
+- [docs/ACCURACY.md](docs/ACCURACY.md): independent accuracy checks and what they show

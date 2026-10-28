@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import mapshaper from 'mapshaper';
 import { normalisePostcode, splitPostcode, compareCodes } from './lib/postcode.mjs';
+import { adjacency, colourGraph } from './lib/colour.mjs';
 import { absorbFragments, buildSites, triangulate, dissolve, toLngLat } from './lib/voronoi.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -177,6 +178,18 @@ for (const [name, siteCode, n] of [
   log(`Dissolved ${name}${brokenRings ? ` (${brokenRings} unclosed rings dropped)` : ''}`);
 }
 
+// Map colours: neighbouring regions get different colours (colour index `k`).
+const colourOf = {};
+for (const [name, siteCode, n] of [
+  ['areas', siteArea, areaCodes.length],
+  ['districts', siteDistrict, districtCodes.length],
+  ['sectors', siteSector, sectorCodes.length],
+]) {
+  const { colours, clashes, clashShare } = colourGraph(n, adjacency(tri, siteCode), config.mapColours);
+  colourOf[name] = colours;
+  log(`Coloured ${name} with ${config.mapColours} colours (${clashes} regions touch a same-coloured neighbour; ${(clashShare * 100).toFixed(2)}% of shared border)`);
+}
+
 // ---------------------------------------------------------------------------
 // 4. Clip to the coastline, simplify, compute labels (mapshaper)
 // ---------------------------------------------------------------------------
@@ -221,12 +234,12 @@ function features(polygons, codes, props, include = () => true) {
 }
 
 const areasOut = await finish(
-  features(levels.areas, areaCodes, (i) => ({ name: areaNames[areaCodes[i]] ?? null, n: countArea[i], nd: districtsPerArea[i] })),
+  features(levels.areas, areaCodes, (i) => ({ name: areaNames[areaCodes[i]] ?? null, n: countArea[i], nd: districtsPerArea[i], k: colourOf.areas[i] })),
   config.simplifyMetres.areas,
 );
 log(`Areas: ${areasOut.polygons.length} polygons`);
 const districtsOut = await finish(
-  features(levels.districts, districtCodes, (i) => ({ a: districtArea[i], n: countDistrict[i], ns: sectorsPerDistrict[i] })),
+  features(levels.districts, districtCodes, (i) => ({ a: districtArea[i], n: countDistrict[i], ns: sectorsPerDistrict[i], k: colourOf.districts[i] })),
   config.simplifyMetres.districts,
 );
 log(`Districts: ${districtsOut.polygons.length} polygons`);
@@ -234,7 +247,7 @@ const sectorsOut = await finish(
   features(
     levels.sectors,
     sectorCodes,
-    (i) => ({ d: sectorDistrictCode[i], a: districtArea[sectorDistrict[i]], n: countSector[i] }),
+    (i) => ({ d: sectorDistrictCode[i], a: districtArea[sectorDistrict[i]], n: countSector[i], k: colourOf.sectors[i] }),
     (i) => isDetail(districtArea[sectorDistrict[i]]),
   ),
   config.simplifyMetres.sectors,

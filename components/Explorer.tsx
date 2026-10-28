@@ -1,21 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { APP_CONFIG, type Bounds } from '@/config/app';
+import { APP_CONFIG, basemapById, type BasemapId, type Bounds } from '@/config/app';
 import { PostcodeData } from '@/lib/data';
 import type { DetailMode } from '@/lib/levels';
+import { reverseGeocode } from '@/lib/lookup';
 import type { HoverInfo, MapController, MapPick, MapViewState, Padding, StackedUnit } from '@/lib/mapController';
-import type { Theme } from '@/lib/mapLayers';
+import type { ColourMode, Theme } from '@/lib/mapLayers';
 import { areaOf } from '@/lib/postcode';
 import { resolveUnit, type Selection } from '@/lib/search';
 import { readUrlState, writeUrlState } from '@/lib/url';
 import { AboutDialog } from './AboutDialog';
 import { DetailsContent } from './DetailsPanel';
 import { AlertIcon, CheckIcon, CloseIcon } from './Icons';
+import { LayersPanel } from './LayersPanel';
 import { Legend } from './Legend';
 import { LevelBar } from './LevelBar';
 import { MapControls } from './MapControls';
 import { BottomSheet, SHEET_PEEK, SidePanel } from './PanelShell';
+import { Quiz } from './Quiz';
 import { SearchBox, type NavResult, type NavTarget, type SearchBoxHandle } from './SearchBox';
 
 const MOBILE_QUERY = '(max-width: 767px)';
@@ -27,8 +30,31 @@ function useIsMobile() {
   );
 }
 
-function storedTheme(): Theme {
-  try { return localStorage.getItem('pc-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
+// Per-viewer conveniences kept in localStorage (all optional).
+interface Prefs { basemap: BasemapId; colourMode: ColourMode; warningDismissed: boolean; recent: NavTarget[] }
+const DEFAULT_PREFS: Prefs = { basemap: 'light', colourMode: 'colours', warningDismissed: false, recent: [] };
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = JSON.parse(localStorage.getItem('pc-prefs') ?? '{}') as Partial<Prefs>;
+    const legacyDark = localStorage.getItem('pc-theme') === 'dark';
+    return {
+      ...DEFAULT_PREFS,
+      ...raw,
+      basemap: basemapById(raw.basemap ?? (legacyDark ? 'dark' : 'light')).id,
+      recent: Array.isArray(raw.recent) ? raw.recent.slice(0, 6) : [],
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+function savePrefs(p: Prefs) {
+  try {
+    localStorage.setItem('pc-prefs', JSON.stringify(p));
+    // Read by the inline script in layout.tsx to avoid a light flash.
+    localStorage.setItem('pc-theme', basemapById(p.basemap).theme);
+  } catch { /* storage unavailable */ }
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -54,7 +80,11 @@ export default function Explorer() {
   const search = useRef<SearchBoxHandle>(null);
   const [data, setData] = useState<PostcodeData | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [theme, setTheme] = useState<Theme>('light');
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const theme = basemapById(prefs.basemap).theme as Theme;
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [mode, setMode] = useState<DetailMode>('auto');
   const [view, setView] = useState<MapViewState | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -62,13 +92,22 @@ export default function Explorer() {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [warningDismissed, setWarningDismissed] = useState(false);
   const [retry, setRetry] = useState(0);
   const isMobile = useIsMobile();
   const mobileRef = useRef(isMobile);
   mobileRef.current = isMobile;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const quizRef = useRef(quizOpen);
+  quizRef.current = quizOpen;
+
+  const updatePrefs = useCallback((patch: Partial<Prefs>) => {
+    setPrefs((p) => {
+      const next = { ...p, ...patch };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
 
   const showToast = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => setToast({ text, tone }), []);
   useEffect(() => {
@@ -78,7 +117,7 @@ export default function Explorer() {
   }, [toast]);
 
   const padding = useCallback((panelOpen: boolean): Padding => {
-    if (mobileRef.current) return { top: 120, right: 24, bottom: panelOpen ? SHEET_PEEK + 24 : 40, left: 24 };
+    if (mobileRef.current) return { top: 130, right: 24, bottom: panelOpen ? SHEET_PEEK + 24 : 40, left: 24 };
     return { top: 110, right: panelOpen ? 410 : 80, bottom: 50, left: 50 };
   }, []);
 
@@ -119,11 +158,11 @@ export default function Explorer() {
   useEffect(() => {
     let cancelled = false;
     let controller: MapController | null = null;
-    const initialTheme = storedTheme();
+    const initialPrefs = loadPrefs();
     const url = (initialUrl.current ??= readUrlState());
-    setTheme(initialTheme);
+    setPrefs(initialPrefs);
     setMode(url.detail);
-    document.documentElement.dataset.theme = initialTheme;
+    document.documentElement.dataset.theme = basemapById(initialPrefs.basemap).theme;
 
     (async () => {
       const d = new PostcodeData();
@@ -137,7 +176,8 @@ export default function Explorer() {
       const { MapController } = await import('@/lib/mapController');
       if (cancelled || !mapEl.current) return;
       controller = await MapController.create(mapEl.current, d, {
-        theme: initialTheme,
+        basemap: initialPrefs.basemap,
+        colourMode: initialPrefs.colourMode,
         mode: url.detail,
         initialBounds: url.hasPosition ? undefined : (APP_CONFIG.homeRegion.bounds as Bounds),
         callbacks: {
@@ -145,7 +185,7 @@ export default function Explorer() {
           onHover: (h) => { if (!cancelled) setHover(h); },
           onError: (m) => { if (!cancelled) showToast(m, 'error'); },
           onPick: (p: MapPick) => {
-            if (cancelled) return;
+            if (cancelled || quizRef.current) return;
             if (!p) { if (!mobileRef.current) select(null); return; }
             if (p.kind === 'units') {
               const u = p.units[0];
@@ -189,18 +229,68 @@ export default function Explorer() {
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement)?.closest('input, textarea, dialog');
       if (e.key === '/' && !typing) { e.preventDefault(); search.current?.focus(); }
-      if (e.key === 'Escape' && !typing && selectionRef.current) select(null);
+      if (e.key === 'Escape' && !typing) {
+        setLayersOpen(false);
+        if (selectionRef.current) select(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [select]);
 
-  const toggleTheme = () => {
-    const next: Theme = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('pc-theme', next); } catch { /* private mode */ }
-    void ctrl.current?.setTheme(next);
+  const changeBasemap = (id: BasemapId) => {
+    updatePrefs({ basemap: id });
+    document.documentElement.dataset.theme = basemapById(id).theme;
+    void ctrl.current?.setBasemap(id);
+  };
+
+  const changeColourMode = (m: ColourMode) => {
+    updatePrefs({ colourMode: m });
+    ctrl.current?.setColourMode(m);
+  };
+
+  /** Search wrapper that remembers successful searches. */
+  const searchNavigate = async (t: NavTarget) => {
+    const r = await navigate(t);
+    if (r.ok) updatePrefs({ recent: [t, ...prefs.recent.filter((x) => x.code !== t.code)].slice(0, 6) });
+    return r;
+  };
+
+  const locate = () => {
+    if (!data || !ctrl.current) return;
+    if (!('geolocation' in navigator)) { showToast('Location isn’t available in this browser.', 'error'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords: { longitude: lng, latitude: lat } }) => {
+        ctrl.current?.setUserLocation({ lng, lat });
+        const [local] = await data.nearestUnits(lng, lat, 1).catch(() => []);
+        if (local && local.metres < 3000) {
+          select({ kind: 'unit', code: local.postcode, lng: local.lng, lat: local.lat, status: 'live', origin: 'local', quality: local.quality }, { fly: true });
+          showToast(`Your nearest postcode is ${local.postcode}, about ${Math.round(local.metres)} m away`);
+        } else {
+          const r = await reverseGeocode(lng, lat);
+          if (r && r !== 'unavailable' && r.longitude != null && r.latitude != null) {
+            select({ kind: 'unit', code: r.postcode, lng: r.longitude, lat: r.latitude, status: 'live', origin: 'remote' }, { fly: true });
+            showToast(`Your nearest postcode is ${r.postcode}`);
+          } else {
+            ctrl.current?.flyTo(lng, lat, 14, padding(false));
+            showToast(r === 'unavailable' ? 'Found you, but couldn’t look up your postcode right now.' : 'No postcode within 2 km — are you in the UK?', 'error');
+          }
+        }
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        showToast(err.code === err.PERMISSION_DENIED ? 'Location permission was denied. Allow it in your browser settings to find your postcode.' : 'Couldn’t get your location.', 'error');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  };
+
+  const openQuiz = () => {
+    select(null);
+    setLayersOpen(false);
+    setQuizOpen(true);
   };
 
   const changeMode = (m: DetailMode) => {
@@ -230,7 +320,7 @@ export default function Explorer() {
   }
 
   const level = view?.level ?? 'districts';
-  const panel = data && selection && (
+  const panel = data && selection && !quizOpen && (
     <DetailsContent
       data={data}
       selection={selection}
@@ -243,7 +333,22 @@ export default function Explorer() {
       onClose={() => select(null)}
     />
   );
-  const showWarning = data && !data.manifest.source.verified && !warningDismissed;
+  const showWarning = data && !data.manifest.source.verified && !prefs.warningDismissed && !quizOpen;
+  const layers = (
+    <LayersPanel
+      basemap={prefs.basemap}
+      colourMode={prefs.colourMode}
+      mode={mode}
+      showDetail={isMobile}
+      onBasemap={changeBasemap}
+      onColourMode={changeColourMode}
+      onMode={changeMode}
+      onAbout={() => { setLayersOpen(false); setAboutOpen(true); }}
+      onClose={() => setLayersOpen(false)}
+    />
+  );
+  // On phones only one bottom sheet / card is shown at a time.
+  const mobileBusy = isMobile && (!!panel || layersOpen || quizOpen);
 
   return (
     <main className="fixed inset-0 overflow-hidden">
@@ -260,7 +365,7 @@ export default function Explorer() {
         </div>
       )}
 
-      {hover && !isMobile && (
+      {hover && !isMobile && !quizOpen && (
         <div className="pointer-events-none absolute z-10 rounded-md border border-line bg-surface px-2 py-1 text-[12px] shadow-float" style={{ left: hover.x + 14, top: hover.y + 14 }}>
           <div className="font-semibold text-ink">{hover.title}</div>
           <div className="text-[11px] text-muted">{hover.subtitle}</div>
@@ -268,42 +373,55 @@ export default function Explorer() {
       )}
 
       <div className="pointer-events-none absolute inset-0 z-20">
-        <div className="absolute top-3 right-3 left-3 flex flex-col gap-2 md:right-auto">
-          <SearchBox ref={search} data={data} onNavigate={(t) => navigate(t)} />
-          <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} />
-          {showWarning && (
-            <div role="note" className="pointer-events-auto flex max-w-[380px] items-start gap-2 rounded-lg border border-line bg-warn-soft px-3 py-2 text-[12px] leading-snug text-warn shadow-float">
-              <AlertIcon width={15} height={15} className="mt-px shrink-0" />
-              <span>
-                {isMobile ? 'Unverified development data.' : 'Development data: postcode records come from an unverified copy of ONSPD.'}{' '}
-                <button onClick={() => setAboutOpen(true)} className="font-semibold underline">Details</button>
-              </span>
-              <button onClick={() => setWarningDismissed(true)} aria-label="Dismiss" className="-mr-1 shrink-0 opacity-70 hover:opacity-100"><CloseIcon width={14} height={14} /></button>
-            </div>
-          )}
-        </div>
-
-        <div className={`absolute right-3 ${isMobile ? (selection ? 'hidden' : 'bottom-10') : selection ? 'right-[392px] bottom-8' : 'bottom-8'}`}>
-          <MapControls
-            theme={theme}
-            homeName={APP_CONFIG.homeRegion.name}
-            onZoomIn={() => ctrl.current?.zoomBy(1)}
-            onZoomOut={() => ctrl.current?.zoomBy(-1)}
-            onHome={() => ctrl.current?.fitBounds(APP_CONFIG.homeRegion.bounds as Bounds, padding(!!selection))}
-            onUk={() => ctrl.current?.fitBounds(APP_CONFIG.ukBounds as Bounds, padding(!!selection))}
-            onTheme={toggleTheme}
-            onAbout={() => setAboutOpen(true)}
-          />
-        </div>
-
-        {!(isMobile && selection) && (
-          <div className="absolute bottom-16 left-3 md:bottom-8">
-            <Legend key={String(isMobile)} level={level} basemap={view?.basemap ?? 'hosted'} defaultOpen={!isMobile} />
+        {!quizOpen && (
+          <div className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 left-3 flex flex-col gap-2 md:right-auto">
+            <SearchBox ref={search} data={data} onNavigate={searchNavigate} recent={prefs.recent} />
+            <LevelBar level={level} mode={mode} loading={view?.loading ?? !data} onMode={changeMode} compact={isMobile} onOpenOptions={() => setLayersOpen(true)} />
+            {showWarning && (
+              <div role="note" className="pointer-events-auto flex max-w-[380px] items-start gap-2 self-start rounded-lg border border-line bg-warn-soft px-3 py-2 text-[12px] leading-snug text-warn shadow-float">
+                <AlertIcon width={15} height={15} className="mt-px shrink-0" />
+                <span>
+                  {isMobile ? 'Unofficial copy of ONS data.' : 'Postcode records come from an unofficial copy of ONS data (cross-checked).'}{' '}
+                  <button onClick={() => setAboutOpen(true)} className="font-semibold underline">Details</button>
+                </span>
+                <button onClick={() => updatePrefs({ warningDismissed: true })} aria-label="Dismiss" className="-mr-1 grid size-6 shrink-0 place-items-center opacity-70 hover:opacity-100"><CloseIcon width={14} height={14} /></button>
+              </div>
+            )}
           </div>
         )}
 
-        {view?.notice && !(isMobile && selection) && (
-          <div className="absolute inset-x-0 bottom-20 flex justify-center px-16 md:bottom-8">
+        {!mobileBusy && (
+          <div className={`absolute right-3 ${isMobile ? 'top-[50%] -translate-y-1/2' : selection && panel ? 'right-[392px] bottom-8' : 'bottom-8'}`}>
+            <MapControls
+              homeName={APP_CONFIG.homeRegion.name}
+              compact={isMobile}
+              locating={locating}
+              layersOpen={layersOpen}
+              onZoomIn={() => ctrl.current?.zoomBy(1)}
+              onZoomOut={() => ctrl.current?.zoomBy(-1)}
+              onHome={() => ctrl.current?.fitBounds(APP_CONFIG.homeRegion.bounds as Bounds, padding(!!selection))}
+              onUk={() => ctrl.current?.fitBounds(APP_CONFIG.ukBounds as Bounds, padding(!!selection))}
+              onLocate={locate}
+              onLayers={() => setLayersOpen((o) => !o)}
+              onQuiz={openQuiz}
+            />
+          </div>
+        )}
+
+        {layersOpen && !isMobile && (
+          <div className={`animate-in pointer-events-auto absolute bottom-8 w-[340px] overflow-hidden rounded-2xl border border-line bg-surface shadow-float ${selection && panel ? 'right-[448px]' : 'right-[64px]'}`}>
+            {layers}
+          </div>
+        )}
+
+        {!mobileBusy && !quizOpen && (
+          <div className="absolute bottom-10 left-3 md:bottom-8">
+            <Legend key={String(isMobile)} level={level} basemap={view?.basemap ?? 'hosted'} colourMode={prefs.colourMode} theme={theme} defaultOpen={!isMobile} />
+          </div>
+        )}
+
+        {view?.notice && !mobileBusy && !quizOpen && (
+          <div className="absolute inset-x-0 bottom-24 flex justify-center px-16 md:bottom-8">
             <div role="status" className="animate-in pointer-events-auto max-w-[460px] rounded-lg border border-line bg-surface px-3.5 py-2 text-center text-[12.5px] leading-snug text-muted shadow-float">
               {view.notice === 'outside-detail'
                 ? <>Sector and individual postcode detail currently covers <strong className="font-semibold text-ink">{data?.manifest.coverage.detailAreas.join(', ')}</strong>. Here the map shows districts — search still works for any UK postcode.</>
@@ -312,15 +430,25 @@ export default function Explorer() {
           </div>
         )}
 
+        {quizOpen && data && ctrl.current && (
+          <div className="absolute inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] flex justify-center md:bottom-8">
+            <Quiz data={data} controller={ctrl.current} padding={() => ({ ...padding(false), bottom: isMobile ? 300 : 260 })} restoreMode={mode} onExit={() => setQuizOpen(false)} />
+          </div>
+        )}
+
         {panel && (isMobile
           ? <BottomSheet label="Postcode details" onClose={() => select(null)} resetKey={`${selection!.kind}:${selection!.code}`}>{panel}</BottomSheet>
           : <SidePanel label="Postcode details">{panel}</SidePanel>)}
+
+        {layersOpen && isMobile && (
+          <BottomSheet label="Map options" onClose={() => setLayersOpen(false)} resetKey="layers" startExpanded>{layers}</BottomSheet>
+        )}
 
         {toast && (
           <div className="absolute inset-x-0 top-[124px] flex justify-center px-4 md:top-4">
             <div role="status" className={`animate-in pointer-events-auto flex max-w-[480px] items-start gap-2 rounded-lg px-3.5 py-2 text-[13px] shadow-float ${toast.tone === 'ok' ? 'bg-ink text-surface' : 'border border-line bg-danger-soft text-danger'}`}>
               {toast.tone === 'ok' ? <CheckIcon width={16} height={16} className="mt-px shrink-0" /> : <AlertIcon width={16} height={16} className="mt-px shrink-0" />}
-              <span className="break-all">{toast.text}</span>
+              <span>{toast.text}</span>
             </div>
           </div>
         )}

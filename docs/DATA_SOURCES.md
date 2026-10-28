@@ -67,6 +67,16 @@ points lie inside their own sector shape and **99.3 %** inside their own distric
 shape. The rest sit near edges, at shared reference points, or are absorbed
 outliers.
 
+## Map colours
+
+In *Colours* mode every region gets one of four colours so that neighbours
+differ (`pipeline/lib/colour.mjs`: DSatur colouring plus a repair pass). Postcode
+geography isn't perfectly planar (detached parts), so a few regions still touch
+a same-coloured neighbour: none at area level, 0.3% of shared border at district
+and 0.4% at sector level. The four colours were chosen as the largest set that
+stays distinguishable for every pair in both light and dark themes; boundaries
+and code labels carry identity, so colour is never the only cue.
+
 ## Postcode points are not addresses
 
 A dot is the postcode's reference coordinate (roughly the centre of its delivery
@@ -92,6 +102,11 @@ The app never derives a post town or county from postcode codes. Specifically:
 - Sectors and individual postcodes: the areas in `detailAreas` (default
   `SY, TF, WV, DY`). Elsewhere the map keeps showing districts when zoomed in and
   shows a notice; search works UK-wide via postcodes.io.
+
+## Accuracy
+
+See [ACCURACY.md](ACCURACY.md) for independent cross-checks of positions,
+live/terminated status and boundaries.
 
 ## Data used for the committed build
 

@@ -10,6 +10,8 @@ import type { DetailMode, Level, Thresholds } from './levels';
 import { ZOOM_CONFIG } from './levels';
 
 export type Theme = 'light' | 'dark';
+/** How region fills are coloured. */
+export type ColourMode = 'colours' | 'density' | 'outline';
 export type RegionLevel = Exclude<Level, 'units'>;
 export const REGION_LEVELS: RegionLevel[] = ['areas', 'districts', 'sectors'];
 
@@ -38,6 +40,7 @@ export const PALETTE = {
     fallbackSea: '#dfe7ef',
     fallbackLand: '#f7f6f3',
     fallbackCoast: '#c5d0dc',
+    neutralLine: '#4b5565',
   },
   dark: {
     accent: '#7aa7ff',
@@ -53,8 +56,59 @@ export const PALETTE = {
     fallbackSea: '#0d1524',
     fallbackLand: '#1a2232',
     fallbackCoast: '#2c3850',
+    neutralLine: '#c3cad8',
   },
 } as const;
+
+/**
+ * Region colours: four hues, so neighbouring regions can always differ (the
+ * pipeline assigns each region a colour index `k`). Four is also the most
+ * hues from the reference palette that stay distinguishable for every pair
+ * in both themes; outlines and code labels are the secondary encoding.
+ */
+export const REGION_COLOURS = {
+  light: ['#2a78d6', '#eda100', '#e87ba4', '#008300'],
+  dark: ['#3987e5', '#c98500', '#d55181', '#008300'],
+} as const;
+
+/** Postcode density (postcodes per km²): single-hue blue ramp, light to dark. */
+export const DENSITY_STOPS: [number, string][] = [
+  [1, '#cde2fb'],
+  [5, '#9ec5f4'],
+  [20, '#6da7ec'],
+  [80, '#3987e5'],
+  [300, '#256abf'],
+  [1000, '#184f95'],
+  [3000, '#0d366b'],
+];
+
+/** On a dark map the ramp is reversed, so sparse areas recede into the background. */
+export function densityStops(theme: Theme): [number, string][] {
+  if (theme === 'light') return DENSITY_STOPS;
+  const colours = DENSITY_STOPS.map(([, c]) => c).reverse();
+  return DENSITY_STOPS.map(([v], i) => [v, colours[i]]);
+}
+
+const density: ExpressionSpecification = ['/', ['get', 'n'], ['max', ['coalesce', ['get', 'km2'], 1], 0.01]];
+
+/** Fill colour for a mode. Always a data expression, so switching modes never changes the expression kind. */
+export function fillColour(mode: ColourMode, theme: Theme): ExpressionSpecification {
+  const c = PALETTE[theme];
+  if (mode === 'colours') {
+    const [a, b, d, e] = REGION_COLOURS[theme];
+    return ['match', ['get', 'k'], 0, a, 1, b, 2, d, 3, e, c.fill];
+  }
+  if (mode === 'density') {
+    return ['interpolate', ['linear'], ['ln', density], ...densityStops(theme).flatMap(([v, col]) => [Math.log(v), col])] as unknown as ExpressionSpecification;
+  }
+  return ['match', ['get', 'k'], -1, c.fill, c.fill];
+}
+
+function fillBase(mode: ColourMode, theme: Theme): ExpressionSpecification {
+  if (mode === 'colours') return theme === 'dark' ? ['case', hover, 0.45, 0.3] : ['case', hover, 0.4, 0.24];
+  if (mode === 'density') return ['case', hover, 0.8, 0.62];
+  return ['case', hover, 0.13, 0.04];
+}
 
 type Win = [number, number];
 type Windows = Record<Level, Win> & { context: Record<RegionLevel, Win>; districtsOutsideDetail: Win };
@@ -142,16 +196,19 @@ const hover: ExpressionSpecification = ['boolean', ['feature-state', 'hover'], f
 const outsideDetail: ExpressionSpecification = ['==', ['get', 'detail'], false];
 
 /** Opacity/visibility paint values that depend on the zoom windows. */
-export function windowedPaint(w: Windows): { layer: string; prop: string; value: Expr }[] {
-  const fillBase: ExpressionSpecification = ['case', hover, 0.13, 0.04];
+export function windowedPaint(w: Windows, mode: ColourMode, theme: Theme): { layer: string; prop: string; value: Expr }[] {
+  const base = fillBase(mode, theme);
   const out: { layer: string; prop: string; value: Expr }[] = [];
   for (const l of REGION_LEVELS) {
     const cases = l === 'districts' ? [{ when: outsideDetail, win: w.districtsOutsideDetail }, { win: w.districts }] : [{ win: w[l] }];
-    out.push({ layer: `${l}-fill`, prop: 'fill-opacity', value: fade(fillBase, cases) });
+    out.push({ layer: `${l}-fill`, prop: 'fill-opacity', value: fade(base, cases) });
     out.push({ layer: `${l}-line`, prop: 'line-opacity', value: fade(0.75, cases) });
     out.push({ layer: `${l}-label`, prop: 'text-opacity', value: fade(1, cases) });
     out.push({ layer: `${l}-context`, prop: 'line-opacity', value: fade(l === 'sectors' ? 0.35 : 0.6, [{ win: w.context[l] }]) });
   }
+  // Under individual postcodes, sectors keep a light tint of their colour.
+  const tint: ExpressionSpecification = mode === 'outline' ? ['*', 0, base] : ['*', 0.5, base];
+  out.push({ layer: 'sectors-tint', prop: 'fill-opacity', value: fade(tint, [{ win: w.context.sectors }]) });
   out.push({ layer: 'units-circle', prop: 'circle-opacity', value: fade(1, [{ win: w.units }]) });
   out.push({ layer: 'units-circle', prop: 'circle-stroke-opacity', value: fade(1, [{ win: w.units }]) });
   out.push({ layer: 'units-label', prop: 'text-opacity', value: fade(1, [{ win: w.units }]) });
@@ -169,6 +226,7 @@ export function layerVisibility(w: Windows, zoom: number): Record<string, boolea
     vis[`${l}-label`] = main;
     vis[`${l}-context`] = near(w.context[l]);
   }
+  vis['sectors-tint'] = near(w.context.sectors);
   vis['units-circle'] = near(w.units);
   vis['units-label'] = near(w.units);
   return vis;
@@ -181,10 +239,23 @@ export const INTERACTIVE_LAYER: Record<Level, string> = {
   units: 'units-circle',
 };
 
+export function lineColour(mode: ColourMode, theme: Theme): string {
+  return mode === 'outline' ? PALETTE[theme].line : PALETTE[theme].neutralLine;
+}
+
+/** Applies a colour mode to existing layers (no re-install needed). */
+export function applyColourMode(map: MlMap, mode: ColourMode, theme: Theme): void {
+  for (const l of REGION_LEVELS) {
+    map.setPaintProperty(`${l}-fill`, 'fill-color', fillColour(mode, theme));
+    map.setPaintProperty(`${l}-line`, 'line-color', lineColour(mode, theme));
+  }
+  map.setPaintProperty('sectors-tint', 'fill-color', fillColour(mode, theme));
+}
+
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 
 /** Adds postcode sources and layers to the current style (idempotent). */
-export function installPostcodeLayers(map: MlMap, theme: Theme, attribution: string): void {
+export function installPostcodeLayers(map: MlMap, theme: Theme, mode: ColourMode, attribution: string): void {
   const c = PALETTE[theme];
   for (const l of ['areas', 'districts', 'sectors', 'units'] as Level[]) {
     if (!map.getSource(SOURCE[l])) {
@@ -199,7 +270,8 @@ export function installPostcodeLayers(map: MlMap, theme: Theme, attribution: str
 
   const lineWidth = (base: number, close: number): ExpressionSpecification => ['interpolate', ['linear'], ['zoom'], 5, base, 14, close];
   for (const l of REGION_LEVELS) {
-    add({ id: `${l}-fill`, type: 'fill', source: SOURCE[l], filter: notLabel, paint: { 'fill-color': c.fill, 'fill-opacity': 0 } }, true);
+    add({ id: `${l}-fill`, type: 'fill', source: SOURCE[l], filter: notLabel, paint: { 'fill-color': fillColour(mode, theme), 'fill-opacity': 0 } }, true);
+    if (l === 'sectors') add({ id: 'sectors-tint', type: 'fill', source: SOURCE[l], filter: notLabel, paint: { 'fill-color': fillColour(mode, theme), 'fill-opacity': 0 } }, true);
     add({
       id: `${l}-context`, type: 'line', source: SOURCE[l], filter: notLabel,
       layout: { 'line-join': 'round' },
@@ -208,7 +280,7 @@ export function installPostcodeLayers(map: MlMap, theme: Theme, attribution: str
     add({
       id: `${l}-line`, type: 'line', source: SOURCE[l], filter: notLabel,
       layout: { 'line-join': 'round' },
-      paint: { 'line-color': c.line, 'line-width': ['case', hover, 2, 0.9], 'line-opacity': 0 },
+      paint: { 'line-color': lineColour(mode, theme), 'line-width': ['case', hover, 2, 0.9], 'line-opacity': 0 },
     }, true);
   }
   for (const l of REGION_LEVELS) {

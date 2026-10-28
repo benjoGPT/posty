@@ -3,13 +3,13 @@
 
 import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
-import { APP_CONFIG, type Bounds } from '@/config/app';
+import { APP_CONFIG, basemapById, type Basemap, type BasemapId, type Bounds } from '@/config/app';
 import type { BBox, PostcodeData, RegionCollection, RegionFeature, UnitFeature } from './data';
 import { containsPoint, featureContains, intersects } from './data';
 import { FALLBACK_THRESHOLDS, LEVEL_LABELS, levelForZoom, thresholdsFor, type DetailMode, type Level, type Thresholds } from './levels';
 import {
-  computeWindows, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
-  type RegionLevel, type Theme,
+  applyColourMode, computeWindows, fallbackStyle, INTERACTIVE_LAYER, installPostcodeLayers, layerVisibility, REGION_LEVELS, SOURCE, windowedPaint,
+  type ColourMode, type RegionLevel, type Theme,
 } from './mapLayers';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
@@ -33,6 +33,14 @@ interface Callbacks {
   onError: (message: string) => void;
 }
 
+interface ControllerOptions {
+  basemap: BasemapId;
+  colourMode: ColourMode;
+  mode: DetailMode;
+  initialBounds?: Bounds;
+  callbacks: Callbacks;
+}
+
 export type Padding = { top: number; right: number; bottom: number; left: number };
 
 const KIND_LEVEL: Record<RegionKind, RegionLevel> = { area: 'areas', district: 'districts', sector: 'sectors' };
@@ -46,11 +54,13 @@ const CONCURRENCY = 6;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const coarsePointer = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
-async function loadBasemap(theme: Theme): Promise<{ style: StyleSpecification; hosted: boolean }> {
+async function loadBasemap(basemap: Basemap): Promise<{ style: StyleSpecification; hosted: boolean }> {
+  const theme = basemap.theme as Theme;
+  if (!basemap.url) return { style: fallbackStyle(theme, window.location.origin, APP_CONFIG.dataBaseUrl), hosted: true };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
-    const r = await fetch(APP_CONFIG.basemaps[theme], { signal: ctrl.signal });
+    const r = await fetch(basemap.url, { signal: ctrl.signal });
     if (!r.ok) throw new Error(String(r.status));
     const style = (await r.json()) as StyleSpecification;
     if (!Array.isArray(style.layers)) throw new Error('not a style');
@@ -79,17 +89,19 @@ export class MapController {
   private hovered: { source: string; id: string } | null = null;
   private selection: Selection | null = null;
   private marker: maplibregl.Marker | null = null;
+  private meMarker: maplibregl.Marker | null = null;
   private renderQueued = false;
   private hoverQueued: MapMouseEvent | null = null;
   private destroyed = false;
+  private labelsHidden = false;
   private refreshSeq = 0;
 
   static async create(
     container: HTMLElement,
     data: PostcodeData,
-    opts: { theme: Theme; mode: DetailMode; initialBounds?: Bounds; callbacks: Callbacks },
+    opts: ControllerOptions,
   ): Promise<MapController> {
-    const { style, hosted } = await loadBasemap(opts.theme);
+    const { style, hosted } = await loadBasemap(basemapById(opts.basemap));
     return new MapController(container, data, style, hosted, opts);
   }
 
@@ -98,7 +110,7 @@ export class MapController {
     private data: PostcodeData,
     style: StyleSpecification,
     hosted: boolean,
-    private opts: { theme: Theme; mode: DetailMode; initialBounds?: Bounds; callbacks: Callbacks },
+    private opts: ControllerOptions,
   ) {
     this.map = new maplibregl.Map({
       container,
@@ -124,6 +136,12 @@ export class MapController {
     this.state = { level: this.level, loading: false, basemap: hosted ? 'hosted' : 'offline', notice: null, centreArea: null };
 
     this.map.on('style.load', () => this.onStyleLoad());
+    // On narrow screens start with the attribution collapsed behind its (i) button.
+    this.map.once('load', () => {
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        this.map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+      }
+    });
     this.map.on('moveend', () => void this.refresh());
     this.map.on('zoom', () => this.onZoom());
     this.map.on('click', (e) => this.onClick(e));
@@ -139,6 +157,7 @@ export class MapController {
   destroy(): void {
     this.destroyed = true;
     this.marker?.remove();
+    this.meMarker?.remove();
     this.map.remove();
   }
 
@@ -152,7 +171,7 @@ export class MapController {
   }
 
   private onStyleLoad(): void {
-    installPostcodeLayers(this.map, this.opts.theme, this.attribution());
+    installPostcodeLayers(this.map, this.theme, this.opts.colourMode, this.attribution());
     this.sourceKeys = {};
     this.visibility = {};
     this.hovered = null;
@@ -162,13 +181,31 @@ export class MapController {
     void this.refresh();
   }
 
-  async setTheme(theme: Theme): Promise<void> {
-    if (theme === this.opts.theme) return;
-    this.opts.theme = theme;
-    const { style, hosted } = await loadBasemap(theme);
-    if (this.destroyed) return;
+  private get theme(): Theme {
+    return basemapById(this.opts.basemap).theme as Theme;
+  }
+
+  async setBasemap(id: BasemapId): Promise<void> {
+    if (id === this.opts.basemap) return;
+    this.opts.basemap = id;
+    const { style, hosted } = await loadBasemap(basemapById(id));
+    if (this.destroyed || this.opts.basemap !== id) return;
     this.map.setStyle(style, { diff: false });
     this.emit({ basemap: hosted ? 'hosted' : 'offline' });
+  }
+
+  setColourMode(mode: ColourMode): void {
+    this.opts.colourMode = mode;
+    if (!this.map.getLayer('units-circle')) return;
+    applyColourMode(this.map, mode, this.theme);
+    this.applyWindows();
+  }
+
+  /** Hides postcode labels (used by the quiz). */
+  setLabelsHidden(hidden: boolean): void {
+    this.labelsHidden = hidden;
+    this.visibility = {};
+    this.applyVisibility();
   }
 
   setMode(mode: DetailMode): void {
@@ -181,14 +218,15 @@ export class MapController {
   private applyWindows(): void {
     if (!this.map.getLayer('units-circle')) return;
     const w = computeWindows(this.thresholds, this.opts.mode);
-    for (const { layer, prop, value } of windowedPaint(w)) this.map.setPaintProperty(layer, prop, value);
+    for (const { layer, prop, value } of windowedPaint(w, this.opts.colourMode, this.theme)) this.map.setPaintProperty(layer, prop, value);
     this.applyVisibility();
   }
 
   private applyVisibility(): void {
     if (!this.map.getLayer('units-circle')) return;
     const vis = layerVisibility(computeWindows(this.thresholds, this.opts.mode), this.map.getZoom());
-    for (const [layer, on] of Object.entries(vis)) {
+    for (const [layer, shown] of Object.entries(vis)) {
+      const on = shown && !(this.labelsHidden && layer.endsWith('-label'));
       if (this.visibility[layer] === on) continue;
       this.visibility[layer] = on;
       this.map.setLayoutProperty(layer, 'visibility', on ? 'visible' : 'none');
@@ -514,6 +552,22 @@ export class MapController {
 
   zoomBy(delta: number): void {
     this.map.zoomTo(this.map.getZoom() + delta, { duration: this.duration(300) });
+  }
+
+  /** Shows (or clears) a "you are here" dot. */
+  setUserLocation(pos: { lng: number; lat: number } | null): void {
+    if (!pos) { this.meMarker?.remove(); return; }
+    if (!this.meMarker) {
+      const el = document.createElement('div');
+      el.className = 'pc-me';
+      el.setAttribute('aria-label', 'Your location');
+      this.meMarker = new maplibregl.Marker({ element: el });
+    }
+    this.meMarker.setLngLat([pos.lng, pos.lat]).addTo(this.map);
+  }
+
+  flyTo(lng: number, lat: number, zoom: number, padding?: Padding): void {
+    this.map.flyTo({ center: [lng, lat], zoom, padding, duration: this.duration(1400), essential: true });
   }
 
   getLevel(): Level {

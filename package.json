@@ -13,7 +13,8 @@
     "data:land": "node pipeline/land.mjs",
     "data:glyphs": "node pipeline/glyphs.mjs",
     "data:build": "node --max-old-space-size=8192 pipeline/build.mjs",
-    "data:verify": "node pipeline/verify.mjs"
+    "data:verify": "node pipeline/verify.mjs",
+    "data:crosscheck": "node --max-old-space-size=6144 pipeline/crosscheck.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

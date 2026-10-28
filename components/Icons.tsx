@@ -20,3 +20,8 @@ export const PinIcon = (p: P) => (<svg {...base} {...p}><path d="M12 21s-6.5-6-6
 export const AlertIcon = (p: P) => (<svg {...base} {...p}><path d="M12 4 2.8 19.5h18.4L12 4Z" /><path d="M12 10v4.5M12 17.2v.3" /></svg>);
 export const ChevronRight = (p: P) => (<svg {...base} {...p}><path d="m9 6 6 6-6 6" /></svg>);
 export const CheckIcon = (p: P) => (<svg {...base} {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>);
+export const LocateIcon = (p: P) => (<svg {...base} {...p}><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" /><circle cx="12" cy="12" r="7.5" /></svg>);
+export const PlayIcon = (p: P) => (<svg {...base} {...p}><path d="M5 12h4l2-3 2 6 2-3h4" /><rect x="2.5" y="4.5" width="19" height="15" rx="3" /></svg>);
+export const ExternalIcon = (p: P) => (<svg {...base} {...p}><path d="M14 4.5h5.5V10M19.5 4.5 11 13" /><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10" /></svg>);
+export const ClockIcon = (p: P) => (<svg {...base} {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>);
+export const ChevronDown = (p: P) => (<svg {...base} {...p}><path d="m6 9 6 6 6-6" /></svg>);

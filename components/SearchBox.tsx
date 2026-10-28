@@ -11,6 +11,8 @@ export type NavResult = { ok: true } | { ok: false; message: string };
 interface Props {
   data: PostcodeData | null;
   onNavigate: (target: NavTarget) => Promise<NavResult>;
+  /** Recently opened searches, newest first, shown while the box is empty. */
+  recent: NavTarget[];
 }
 
 export interface SearchBoxHandle {
@@ -19,7 +21,7 @@ export interface SearchBoxHandle {
 
 const KIND_LABEL: Record<Suggestion['kind'], string> = { area: 'Area', district: 'District', sector: 'Sector', unit: 'Postcode' };
 
-export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({ data, onNavigate }, ref) {
+export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({ data, onNavigate, recent }, ref) {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(-1);
@@ -55,7 +57,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
 
   async function submit() {
     if (!data) return;
-    if (active >= 0 && items[active]) return go(items[active]);
+    if (active >= 0 && shown[active]) return go(shown[active]);
     setBusy(true);
     const r = await resolveQuery(query, data);
     setBusy(false);
@@ -64,7 +66,9 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
     setMessage(r.message);
   }
 
-  const showList = open && items.length > 0;
+  const recentItems: Suggestion[] = recent.map((t) => ({ kind: t.kind, code: t.code, title: t.code, subtitle: 'Recent search' }));
+  const shown = query.trim() ? items : recentItems;
+  const showList = open && shown.length > 0;
 
   return (
     <div className="pointer-events-auto relative w-full md:w-[380px]">
@@ -78,14 +82,14 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
           ref={inputRef}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); setMessage(null); }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => { setOpen(true); setActive(-1); }}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(items.length - 1, a + 1)); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(shown.length - 1, a + 1)); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); }
             else if (e.key === 'Escape') { if (open && items.length) setOpen(false); else inputRef.current?.blur(); }
           }}
-          placeholder="Search a postcode, district or area"
+          placeholder="Search a postcode or area"
           aria-label="Search postcodes"
           role="combobox"
           aria-expanded={showList}
@@ -96,7 +100,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
           autoCapitalize="characters"
           spellCheck={false}
           enterKeyHint="search"
-          className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint"
+          className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-faint md:text-[15px]"
         />
         {query && (
           <button
@@ -112,7 +116,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
 
       {showList && (
         <ul id={listId} role="listbox" aria-label="Suggestions" className="animate-in absolute inset-x-0 top-[52px] z-30 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-float">
-          {items.map((s, i) => (
+          {shown.map((s, i) => (
             <li
               key={`${s.kind}:${s.code}`}
               id={`${listId}-${i}`}
@@ -124,7 +128,7 @@ export const SearchBox = forwardRef<SearchBoxHandle, Props>(function SearchBox({
             >
               <span className="w-[62px] shrink-0 text-[11px] font-medium tracking-wide text-faint uppercase">{KIND_LABEL[s.kind]}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-ink">{s.title}</span>
+                <span className="pc-code block truncate text-[14px] font-semibold text-ink">{s.title}</span>
                 <span className="block truncate text-[12px] text-muted">{s.subtitle}</span>
               </span>
             </li>

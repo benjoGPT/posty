@@ -8,7 +8,7 @@ import type { StackedUnit } from '@/lib/mapController';
 import { areaOf, compareCodes, districtOf, sectorOf } from '@/lib/postcode';
 import type { RegionKind, Selection } from '@/lib/search';
 import type { NavTarget } from './SearchBox';
-import { AlertIcon, ChevronRight, CloseIcon, CopyIcon, LinkIcon, ZoomInIcon } from './Icons';
+import { AlertIcon, ChevronRight, CloseIcon, CopyIcon, ExternalIcon, LinkIcon, ZoomInIcon } from './Icons';
 
 interface Props {
   data: PostcodeData;
@@ -68,7 +68,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function CodeLink({ code, sub, onClick }: { code: string; sub?: string | null; onClick: () => void }) {
   return (
     <button onClick={onClick} className="group -mx-1 inline-flex items-center gap-1 rounded px-1 text-left hover:bg-surface-hover">
-      <span className="font-semibold whitespace-pre text-accent-text">{code}</span>
+      <span className="pc-code font-semibold whitespace-pre text-accent-text">{code}</span>
       {sub && <span className="text-muted">· {sub}</span>}
       <ChevronRight width={14} height={14} className="text-faint group-hover:text-accent-text" />
     </button>
@@ -97,7 +97,7 @@ function Header({ eyebrow, title, badge, onClose }: { eyebrow: string; title: Re
           <span className="text-[11.5px] font-medium tracking-wide text-muted uppercase">{eyebrow}</span>
           {badge}
         </div>
-        <h2 className="mt-0.5 truncate text-[24px] leading-tight font-semibold tracking-tight text-ink">{title}</h2>
+        <h2 className="pc-code mt-0.5 truncate text-[24px] leading-tight font-semibold tracking-tight text-ink">{title}</h2>
       </div>
       <button onClick={onClose} aria-label="Close details" className="-mr-1.5 grid size-8 shrink-0 place-items-center rounded-lg text-faint hover:bg-surface-hover hover:text-ink">
         <CloseIcon />
@@ -128,6 +128,8 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
   const area = data.areas.get(areaOf(sel.code));
   const coords = `${sel.lat.toFixed(6)}, ${sel.lng.toFixed(6)}`;
   const admin = lookup?.status === 'live' ? lookup.data : null;
+  const nearby = useAsync(() => data.nearestUnits(sel.lng, sel.lat, 6, sel.code), [sel.code, sel.lng, sel.lat]);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${sel.lat.toFixed(6)},${sel.lng.toFixed(6)}`;
 
   return (
     <>
@@ -180,7 +182,25 @@ function UnitDetails({ data, sel, stack, onNavigate, onPickStacked, onCopy, onSh
           <Row label="Latitude, longitude"><span className="tabular">{coords}</span></Row>
           {sel.quality != null && QUALITY[sel.quality] && <Row label="Positional quality">{QUALITY[sel.quality]}</Row>}
         </dl>
+        <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent-text hover:underline">
+          <ExternalIcon width={14} height={14} /> Open in Google Maps
+        </a>
       </Section>
+
+      {nearby && nearby.length > 0 && (
+        <Section title="Nearby postcodes">
+          <ul className="grid grid-cols-2 gap-1.5">
+            {nearby.map((u) => (
+              <li key={u.postcode}>
+                <button onClick={() => onNavigate({ kind: 'unit', code: u.postcode })} className="flex w-full items-baseline justify-between gap-2 rounded-md border border-line px-2 py-1.5 text-left hover:border-accent">
+                  <span className="pc-code text-[12.5px] font-semibold whitespace-pre text-ink">{u.postcode}</span>
+                  <span className="tabular text-[11px] text-faint">{u.metres < 1000 ? `${Math.round(u.metres)} m` : `${(u.metres / 1000).toFixed(1)} km`}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section
         title="Administrative geography"
@@ -270,7 +290,7 @@ function RegionDetails({ data, sel, onNavigate, onZoom, onCopy, onShare, onClose
         <Section title={`Contains ${children.label}`}>
           <div className="flex max-h-[132px] flex-wrap gap-1.5 overflow-auto">
             {children.codes.map((c) => (
-              <button key={c} onClick={() => onNavigate({ kind: children!.kind, code: c })} className="rounded-md border border-line px-2 py-0.5 text-[12px] font-medium text-ink hover:border-accent hover:text-accent-text">
+              <button key={c} onClick={() => onNavigate({ kind: children!.kind, code: c })} className="pc-code rounded-md border border-line px-2 py-0.5 text-[12px] font-medium text-ink hover:border-accent hover:text-accent-text">
                 {c}
               </button>
             ))}

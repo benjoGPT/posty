@@ -2,21 +2,26 @@
 
 import { useState } from 'react';
 import { LEVEL_LABELS, LEVELS, type Level } from '@/lib/levels';
+import { densityStops, REGION_COLOURS, type ColourMode, type Theme } from '@/lib/mapLayers';
 import { LayersIcon } from './Icons';
 
 interface Props {
   level: Level;
   basemap: 'hosted' | 'offline';
+  colourMode: ColourMode;
+  theme: Theme;
   defaultOpen: boolean;
 }
 
-export function Legend({ level, basemap, defaultOpen }: Props) {
+const fmt = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
+
+export function Legend({ level, basemap, colourMode, theme, defaultOpen }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="pointer-events-auto flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-[12.5px] font-medium text-muted shadow-float hover:text-ink"
+        className="pointer-events-auto flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-[13px] font-medium text-muted shadow-float hover:text-ink"
         aria-expanded={false}
       >
         <LayersIcon width={16} height={16} /> Legend
@@ -24,8 +29,19 @@ export function Legend({ level, basemap, defaultOpen }: Props) {
     );
   }
   const active = LEVELS.indexOf(level);
+  const swatch = (l: Level, i: number) => {
+    if (l === 'units') return <span className="grid size-4 place-items-center"><span className="size-2.5 rounded-full border-[1.5px] border-surface bg-accent" /></span>;
+    void i;
+    const colour = colourMode === 'density' ? densityStops(theme)[3][1] : undefined;
+    return (
+      <span
+        className="size-4 rounded-[3px] border"
+        style={{ borderWidth: l === 'areas' ? 2 : l === 'districts' ? 1.5 : 1, borderColor: colour ?? 'color-mix(in srgb, var(--accent) 70%, transparent)', background: colour ? `color-mix(in srgb, ${colour} 40%, transparent)` : 'color-mix(in srgb, var(--accent) 10%, transparent)' }}
+      />
+    );
+  };
   return (
-    <section aria-label="Map legend" className="animate-in pointer-events-auto w-[236px] rounded-xl border border-line bg-surface p-3 text-[12px] shadow-float">
+    <section aria-label="Map legend" className="animate-in pointer-events-auto w-[244px] rounded-xl border border-line bg-surface p-3 text-[12px] shadow-float">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-[11px] font-semibold tracking-wider text-faint uppercase">Postcode levels</h2>
         <button onClick={() => setOpen(false)} className="rounded px-1 text-[11px] text-faint hover:text-ink" aria-expanded>
@@ -35,17 +51,34 @@ export function Legend({ level, basemap, defaultOpen }: Props) {
       <ol className="space-y-1">
         {LEVELS.map((l, i) => (
           <li key={l} className={`flex items-center gap-2.5 rounded-md px-1.5 py-1 ${i === active ? 'bg-accent-soft' : ''}`} aria-current={i === active ? 'true' : undefined}>
-            {l === 'units' ? (
-              <span className="grid size-4 place-items-center"><span className="size-2.5 rounded-full border-[1.5px] border-surface bg-accent" /></span>
-            ) : (
-              <span className="size-4 rounded-[3px] border border-accent/70 bg-accent/10" style={{ borderWidth: l === 'areas' ? 2 : l === 'districts' ? 1.5 : 1 }} />
-            )}
+            {swatch(l, i)}
             <span className={`flex-1 ${i === active ? 'font-semibold text-accent-text' : 'text-ink'}`}>{LEVEL_LABELS[l].plural}</span>
             <span className="font-mono text-[11px] text-faint">{LEVEL_LABELS[l].example}</span>
           </li>
         ))}
       </ol>
-      <p className="mt-2.5 border-t border-line pt-2 leading-snug text-muted">
+
+      {colourMode === 'colours' && (
+        <div className="mt-2.5 flex items-start gap-2 border-t border-line pt-2 leading-snug text-muted">
+          <span className="mt-0.5 grid shrink-0 grid-cols-2 gap-0.5" aria-hidden>
+            {REGION_COLOURS[theme].map((c) => <span key={c} className="size-2 rounded-[2px]" style={{ background: c }} />)}
+          </span>
+          <span>Colours only keep neighbouring regions apart; they don’t mean anything else.</span>
+        </div>
+      )}
+      {colourMode === 'density' && (
+        <div className="mt-2.5 border-t border-line pt-2">
+          <div className="mb-1 text-muted">Postcodes per km²</div>
+          <div className="flex h-2.5 overflow-hidden rounded-sm" aria-hidden>
+            {densityStops(theme).map(([v, c]) => <span key={v} className="flex-1" style={{ background: c }} />)}
+          </div>
+          <div className="tabular mt-0.5 flex justify-between text-[10.5px] text-faint">
+            {densityStops(theme).filter((_, i) => i % 2 === 0).map(([v]) => <span key={v}>{fmt(v)}</span>)}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-2 border-t border-line pt-2 leading-snug text-muted">
         Boundaries are <strong className="font-semibold text-ink">approximate</strong>, derived from postcode reference points. Dots are official reference points, not addresses.
       </p>
       {basemap === 'offline' && <p className="mt-1.5 leading-snug text-warn">Basemap unavailable — showing coastline only.</p>}

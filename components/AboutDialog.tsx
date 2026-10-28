@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { APP_CONFIG } from '@/config/app';
 import type { Manifest } from '@/lib/data';
 import { AlertIcon, CloseIcon } from './Icons';
@@ -14,8 +14,51 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+interface CrossCheck {
+  generated: string;
+  seed?: { live: number; liveFound: number; identical: number; terminated: number; terminatedAbsent: number; seedNewestIntroduction: string };
+  dwyl?: Record<string, { both: number; medianM: number; p95M: number; over100m: number }>;
+  wiki?: Record<string, { pointsInOwnOurs: number; pointsInOwnWikipedia: number; landAgreement: number }>;
+}
+
+const pc = (n: number, d: number) => `${((100 * n) / d).toFixed(1)}%`;
+
+function CrossCheckBlock({ c }: { c: CrossCheck }) {
+  const local = Object.entries(c.dwyl ?? {}).filter(([k]) => k !== 'Rest of GB');
+  const both = local.reduce((s, [, v]) => s + v.both, 0);
+  const over = local.reduce((s, [, v]) => s + v.over100m, 0);
+  const wiki = Object.values(c.wiki ?? {});
+  return (
+    <Block title="Independent accuracy checks">
+      <p>Checked {c.generated} against sources that weren’t used to build the map:</p>
+      <ul className="list-disc space-y-1 pl-5 text-[12.5px]">
+        {c.seed && (
+          <li>
+            <strong className="font-medium text-ink">Official ONSPD rows</strong> (postcodes.io database sample, {c.seed.seedNewestIntroduction.slice(0, 4)}): {pc(c.seed.liveFound, c.seed.live)} of {c.seed.live.toLocaleString()} live postcodes present, {pc(c.seed.identical, c.seed.liveFound)} at the identical position; {pc(c.seed.terminatedAbsent, c.seed.terminated)} of terminated postcodes correctly absent. The few differences are postcodes created or retired after this map’s release.
+          </li>
+        )}
+        {both > 0 && (
+          <li>
+            <strong className="font-medium text-ink">Independent 2017 coordinate list</strong>: {both.toLocaleString()} postcodes compared in the detail areas; {pc(both - over, both)} within 100 m (typical difference 2–3 m). Larger differences are mostly postcodes repositioned by ONS since 2017.
+          </li>
+        )}
+        {wiki.length > 0 && (
+          <li>
+            <strong className="font-medium text-ink">Wikipedia district outlines</strong>: the two sets of district boundaries agree on {Math.min(...wiki.map((w) => w.landAgreement)).toFixed(1)}–{Math.max(...wiki.map((w) => w.landAgreement)).toFixed(1)}% of the land.
+          </li>
+        )}
+      </ul>
+    </Block>
+  );
+}
+
 export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClose: () => void; manifest: Manifest | null }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [check, setCheck] = useState<CrossCheck | null>(null);
+  useEffect(() => {
+    if (!open || check) return;
+    fetch(`${APP_CONFIG.dataBaseUrl}/crosscheck.json`).then((r) => (r.ok ? r.json() : null)).then(setCheck, () => {});
+  }, [open, check]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -63,6 +106,7 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
               {manifest.coverage.note && <p>{manifest.coverage.note}</p>}
               <p>Postal geography isn’t administrative geography: SY and TF postcodes extend into Wales and Cheshire, and parts of {APP_CONFIG.homeRegion.name} (e.g. Bridgnorth, WV16) use other areas’ postcodes.</p>
             </Block>
+            {check && <CrossCheckBlock c={check} />}
             <Block title="Boundaries are approximate">
               <p>{manifest.boundaries.description}</p>
               <p>Coastline: {manifest.boundaries.coastline}.</p>

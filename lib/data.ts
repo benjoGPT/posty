@@ -136,6 +136,26 @@ export class PostcodeData {
     return { postcode, lng, lat, quality: f.properties.q };
   }
 
+  /**
+   * Nearest postcodes to a point from local detail data (empty outside detail
+   * coverage). Distances in metres.
+   */
+  async nearestUnits(lng: number, lat: number, count = 1, exclude?: string): Promise<(UnitRecord & { metres: number })[]> {
+    const pad = 0.03; // ~2–3 km
+    const box: BBox = [lng - pad, lat - pad, lng + pad, lat + pad];
+    const districts = this.districtsInBounds(box, true);
+    if (!districts.length) return [];
+    const all = (await Promise.all(districts.map((d) => this.loadUnits(d.c).catch(() => [])))).flat();
+    return all
+      .filter((u) => u.properties.c !== exclude)
+      .map((u) => {
+        const [x, y] = u.geometry.coordinates;
+        return { postcode: u.properties.c, lng: x, lat: y, quality: u.properties.q, metres: haversine(lat, lng, y, x) };
+      })
+      .sort((a, b) => a.metres - b.metres)
+      .slice(0, count);
+  }
+
   areasInBounds(b: BBox): AreaInfo[] {
     return [...this.areas.values()].filter((a) => intersects(a.b, b));
   }
@@ -152,6 +172,12 @@ export class PostcodeData {
   sortedDistricts(area: string): DistrictInfo[] {
     return [...(this.districtsByArea.get(area) ?? [])].sort((a, b) => compareCodes(a.c, b.c));
   }
+}
+
+export function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const r = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * r) / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lng2 - lng1) * r) / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(a));
 }
 
 export function intersects(a: BBox, b: BBox): boolean {

@@ -109,3 +109,13 @@ export async function lookupOutcode(outcode: string): Promise<OutcodeInfo | null
     return 'unavailable';
   }
 }
+
+/** Nearest live postcode to a point (UK-wide). Resolves null if none within ~2 km, 'unavailable' on failure. */
+export async function reverseGeocode(lng: number, lat: number): Promise<LivePostcode | null | 'unavailable'> {
+  try {
+    const r = await get<LivePostcode[] | null>(`/postcodes?lon=${lng.toFixed(6)}&lat=${lat.toFixed(6)}&limit=1&radius=2000&widesearch=true`);
+    return r.body?.[0] ?? null;
+  } catch {
+    return 'unavailable';
+  }
+}

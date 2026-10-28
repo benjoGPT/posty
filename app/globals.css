@@ -144,6 +144,26 @@ body {
   }
 }
 
+/* "You are here" */
+.pc-me {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 0 rgb(26 115 232 / 0.45), 0 1px 4px rgb(0 0 0 / 0.3);
+  animation: pc-pulse 2s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes pc-pulse {
+  70% {
+    box-shadow: 0 0 0 14px rgb(26 115 232 / 0), 0 1px 4px rgb(0 0 0 / 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(26 115 232 / 0), 0 1px 4px rgb(0 0 0 / 0.3);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -169,4 +189,9 @@ body {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* Postcode codes: Inter's narrow space next to "1" makes "SY1 1" read as "SY11". */
+.pc-code {
+  word-spacing: 0.2em;
 }
