@@ -22,6 +22,7 @@
     "data:community": "node pipeline/community.mjs && node pipeline/access.mjs && python3 pipeline/shard-community.py",
     "data:amenities": "node pipeline/amenities.mjs",
     "data:names": "python3 pipeline/names.py",
+    "data:profiles": "python3 pipeline/dashboard-geography.py && python3 pipeline/pubs.py",
     "data:check-updates": "node pipeline/check-updates.mjs"
   },
   "dependencies": {

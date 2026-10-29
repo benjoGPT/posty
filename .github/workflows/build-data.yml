@@ -67,6 +67,9 @@ jobs:
       - name: Community measures and crime coverage
         run: npm run data:community
 
+      - name: County, town and pub dashboard data
+        run: npm run data:profiles
+
       - name: Verify
         run: npm run data:verify
 
