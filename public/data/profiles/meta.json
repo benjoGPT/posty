@@ -1,8 +1,9 @@
 {
-  "generated": "2026-10-29T13:07:11Z",
+  "generated": "2026-10-29T13:14:05Z",
   "profiles": 8067,
   "counties": 318,
   "towns": 7749,
+  "indexShards": 32,
   "sourcePostcodes": 1586404,
   "sources": [
     "ONS Postcode Directory August 2026",

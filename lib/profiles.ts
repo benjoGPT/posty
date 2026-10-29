@@ -21,10 +21,9 @@ let indexTask: Promise<ProfileIndexRow[]> | undefined;
 const profileCache = new Map<string, Promise<AreaProfileData>>();
 
 export async function loadProfileIndex(base = '/data'): Promise<ProfileIndexRow[]> {
-  indexTask ??= fetch(`${base}/profiles/index.json`).then(r => {
-    if (!r.ok) throw new Error('National area search is temporarily unavailable.');
-    return r.json() as Promise<ProfileIndexRow[]>;
-  });
+  indexTask ??= Promise.all(Array.from({length:32},(_,i)=>fetch(`${base}/profiles/index/${i}.json`).then(r=>{
+    if(!r.ok)throw new Error('National area search is temporarily unavailable.');return r.json() as Promise<ProfileIndexRow[]>;
+  }))).then(rows=>rows.flat());
   return indexTask;
 }
 

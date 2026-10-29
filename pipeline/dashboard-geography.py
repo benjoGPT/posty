@@ -123,7 +123,7 @@ profiles.sort(key=lambda p:(p['kind'],p['name'],p['code']))
 for i in range(32):
  rows=[p for p in profiles if sum(map(ord,p['code']))%32==i]
  (OUT/'geography'/f'{i}.json').write_text(json.dumps(rows,separators=(',',':')))
-index=[{k:p[k] for k in ('code','kind','name','country','lat','lng','population')} for p in profiles]
-(OUT/'index.json').write_text(json.dumps(index,separators=(',',':')))
-(OUT/'meta.json').write_text(json.dumps({'generated':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'profiles':len(profiles),'counties':sum(p['kind']=='county' for p in profiles),'towns':sum(p['kind']=='town' for p in profiles),'sourcePostcodes':source_rows,'sources':['ONS Postcode Directory August 2026','ONS Built-up Areas April 2024 names and codes','Census 2021 bulk tables via Nomis'],'method':'LSOA Census counts allocated by each target geography share of active postcodes in that LSOA. At least 98% table coverage required.'},indent=2))
+index=[{k:p[k] for k in ('code','kind','name','country','lat','lng','population')} for p in profiles];(OUT/'index').mkdir(exist_ok=True)
+for i in range(32):(OUT/'index'/f'{i}.json').write_text(json.dumps(index[i::32],separators=(',',':')))
+(OUT/'meta.json').write_text(json.dumps({'generated':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'profiles':len(profiles),'counties':sum(p['kind']=='county' for p in profiles),'towns':sum(p['kind']=='town' for p in profiles),'indexShards':32,'sourcePostcodes':source_rows,'sources':['ONS Postcode Directory August 2026','ONS Built-up Areas April 2024 names and codes','Census 2021 bulk tables via Nomis'],'method':'LSOA Census counts allocated by each target geography share of active postcodes in that LSOA. At least 98% table coverage required.'},indent=2))
 print('Profiles:',len(profiles),'county/council:',sum(p['kind']=='county' for p in profiles),'town:',sum(p['kind']=='town' for p in profiles),flush=True)

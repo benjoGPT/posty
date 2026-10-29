@@ -29,6 +29,8 @@ for f in (ROOT/'public/data/profiles/geography').glob('*.json'):
  rows=json.load(open(f))
  for p in rows:p['pubs']=counts[(p['kind'],p['code'])]
  f.write_text(json.dumps(rows,separators=(',',':')))
-with gzip.open(OUT/'records.json.gz','wt',encoding='utf-8') as z:json.dump(records,z,separators=(',',':'))
-(OUT/'meta.json').write_text(json.dumps({'generated':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':url,'classification':'Food Standards Agency BusinessTypeID 7843, Pub/bar/nightclub','records':len(records),'byNation':nations,'mappedToProfile':sum(1 for p in records if p['county'] or p['town']),'limitations':'An establishment register, not a definitive count of every trading pub. Closures and new openings depend on local-authority updates. Coordinates and names are published by the FSA.'},indent=2))
+(OUT/'records').mkdir(exist_ok=True)
+for i in range(32):
+ with gzip.open(OUT/'records'/f'{i}.json.gz','wt',encoding='utf-8') as z:json.dump(records[i::32],z,separators=(',',':'))
+(OUT/'meta.json').write_text(json.dumps({'generated':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':url,'classification':'Food Standards Agency BusinessTypeID 7843, Pub/bar/nightclub','records':len(records),'recordShards':32,'byNation':nations,'mappedToProfile':sum(1 for p in records if p['county'] or p['town']),'limitations':'An establishment register, not a definitive count of every trading pub. Closures and new openings depend on local-authority updates. Coordinates and names are published by the FSA.'},indent=2))
 print('Pub/bar/nightclub records:',len(records),'nations:',dict(nations),flush=True)
