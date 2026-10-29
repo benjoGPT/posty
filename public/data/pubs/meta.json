@@ -1,0 +1,14 @@
+{
+  "generated": "2026-10-29T13:08:12.236578+00:00",
+  "source": "https://safhrsprodstorage.blob.core.windows.net/opendatafileblobstorage/FHRS_All_en-GB.csv",
+  "classification": "Food Standards Agency BusinessTypeID 7843, Pub/bar/nightclub",
+  "records": 45255,
+  "byNation": {
+    "England": 37994,
+    "Northern Ireland": 974,
+    "Scotland": 3610,
+    "Wales": 2677
+  },
+  "mappedToProfile": 40248,
+  "limitations": "An establishment register, not a definitive count of every trading pub. Closures and new openings depend on local-authority updates. Coordinates and names are published by the FSA."
+}

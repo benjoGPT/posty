@@ -4,7 +4,7 @@ Official inputs: ONSPD August 2026 geography, ONS April 2024 BUA names and
 Nomis Census 2021 bulk tables. Census counts are allocated from LSOAs by the
 share of active postcodes in each target geography. This is explicit in the UI.
 """
-import collections,csv,gzip,io,json,math,pathlib,shutil,time,urllib.parse,urllib.request,zipfile
+import collections,concurrent.futures,csv,gzip,io,json,math,pathlib,shutil,time,urllib.parse,urllib.request,zipfile
 ROOT=pathlib.Path(__file__).resolve().parent.parent; RAW=ROOT/'raw/dashboard'; OUT=ROOT/'public/data/profiles'; RAW.mkdir(parents=True,exist_ok=True); OUT.mkdir(parents=True,exist_ok=True)
 UA={'User-Agent':'Postcode Atlas data builder (Open Government Licence reuse)'}
 def fetch(url,path,timeout=300):
@@ -34,9 +34,20 @@ def first(row,*names):
 
 archive=fetch('https://www.arcgis.com/sharing/rest/content/items/9e5a92a3cfb14dc7ad43d6ea7a7b8c7f/data',RAW/'onspd.zip')
 councils={x['properties']['c']:x['properties'] for x in json.load(open(ROOT/'pipeline/reference/councils.geojson'))['features']}
-bua_url='https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/BUA_APR_2024_EW_NC/FeatureServer/0/query?'+urllib.parse.urlencode({'where':'1=1','outFields':'*','returnGeometry':'false','f':'json','resultRecordCount':10000})
-bua_json=json.load(urllib.request.urlopen(urllib.request.Request(bua_url,headers=UA),timeout=120))
-bua_names={first(x['attributes'],'BUA24CD','BUA24CDH'):first(x['attributes'],'BUA24NM','BUA24NMW') for x in bua_json.get('features',[]) if first(x['attributes'],'BUA24CD','BUA24CDH')}
+bua_service='https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/BUA_APR_2024_EW_NC/FeatureServer/0/query?'
+bua_cache=RAW/'bua-names.json'
+def bua_page(offset):
+ bua_url=bua_service+urllib.parse.urlencode({'where':'1=1','outFields':'*','returnGeometry':'false','f':'json','resultRecordCount':1000,'resultOffset':offset,'orderByFields':'BUA24CD'})
+ return json.load(urllib.request.urlopen(urllib.request.Request(bua_url,headers=UA),timeout=180)).get('features',[])
+if bua_cache.exists():bua_names=json.load(open(bua_cache))
+else:
+ bua_names={}
+ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:pages=list(pool.map(bua_page,range(0,10000,1000)))
+ for features in pages:
+  for x in features:
+   code=first(x['attributes'],'BUA24CD','BUA24CDH')
+   if code:bua_names[code]=first(x['attributes'],'BUA24NM','BUA24NMW')
+ bua_cache.write_text(json.dumps(bua_names,separators=(',',':')))
 if len(bua_names)<5000:raise ValueError(f'Incomplete BUA names lookup: {len(bua_names)}')
 members=collections.defaultdict(collections.Counter); meta=collections.defaultdict(lambda:[0,0.,0.,'']); lsoa_all=collections.Counter(); pc_geog={}
 country={'E':'England','W':'Wales','S':'Scotland'}
@@ -47,7 +58,7 @@ for row in zip_rows(archive,lambda n:'/multi_csv/' in n and n.endswith('.csv')):
  if not pc or not lsoa.startswith(('E01','W01')):continue
  try:lat=float(row['lat']);lng=float(row['long'])
  except:continue
- lad=first(row,'lad25cd','lad24cd','oslaua');bua=first(row,'bua24cd','bua22cd')
+ lad=first(row,'lad26cd','lad25cd','lad24cd','oslaua');bua=first(row,'bua24cd','bua22cd')
  targets=[]
  if lad in councils:targets.append(('county',lad))
  if bua in bua_names:targets.append(('town',bua))
@@ -85,13 +96,13 @@ for lsoa in lsoa_all:
   age=int(m.group());n=f(v);t['age_total']+=n
   if age<=10:t['children_n']+=n
   if age>=65:t['older_n']+=n
- r=tables['ts054'][lsoa];t['tenure_total']=direct(r,'total: all households');t['owned_n']=direct(r,': owned')+direct(r,': shared ownership');t['private_rent_n']=direct(r,': private rented')+direct(r,': lives rent free');t['social_rent_n']=direct(r,': social rented')
- r=tables['ts044'][lsoa];t['home_total']=direct(r,'total: all households');t['detached_n']=direct(r,': detached');t['flats_n']=contains(r,'accommodation type:','flat, maisonette or apartment')
+ r=tables['ts054'][lsoa];t['tenure_total']=direct(r,'total: all households');t['owned_n']=direct(r,': owned');t['private_rent_n']=direct(r,': private rented')+direct(r,': lives rent free');t['social_rent_n']=direct(r,': social rented')
+ r=tables['ts044'][lsoa];t['home_total']=direct(r,'total: all households');t['detached_n']=direct(r,': detached');t['flats_n']=sum(f(v) for k,v in r.items() if any(x in k.lower() for x in ('purpose-built block','converted or shared house','another converted building','commercial building')))
  r=tables['ts045'][lsoa];t['car_total']=next((f(v) for k,v in r.items() if 'total: all households' in k.lower()),0);t['no_car_n']=contains(r,'no cars or vans in household')
  r=tables['ts037'][lsoa];t['health_total']=next((f(v) for k,v in r.items() if 'total: all usual residents' in k.lower()),0);t['good_health_n']=direct(r,': very good health')+direct(r,': good health')
  r=tables['ts038'][lsoa];t['disability_total']=next((f(v) for k,v in r.items() if 'total: all usual residents' in k.lower()),0);t['disabled_n']=direct(r,': disabled under the equality act')
- r=tables['ts066'][lsoa];t['activity_total']=next((f(v) for k,v in r.items() if 'total: all usual residents aged 16 years and over' in k.lower()),0);t['employed_n']=direct(r,': in employment');t['unemployed_n']=direct(r,': unemployed')
- r=tables['ts067'][lsoa];t['qualification_total']=next((f(v) for k,v in r.items() if 'total: all usual residents aged 16 years and over' in k.lower()),0);t['degree_n']=contains(r,'level 4 qualifications or above')
+ r=tables['ts066'][lsoa];t['activity_total']=next((f(v) for k,v in r.items() if 'total: all usual residents aged 16 years and over' in k.lower()),0);t['employed_n']=sum(f(v) for k,v in r.items() if k.endswith(':In employment'));t['unemployed_n']=direct(r,': unemployed')
+ r=tables['ts067'][lsoa];t['qualification_total']=next((f(v) for k,v in r.items() if 'total: all usual residents aged 16 years and over' in k.lower()),0);t['degree_n']=contains(r,'level 4 qualifications and above')
  facts[lsoa]=t
 
 profiles=[]

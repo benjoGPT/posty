@@ -56,10 +56,14 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
   const ref = useRef<HTMLDialogElement>(null);
   const [check, setCheck] = useState<CrossCheck | null>(null);
   const [places, setPlaces] = useState<{ source: string; counts: Record<string, number>; attribution: string; notes: Record<string, string> } | null>(null);
+  const [profiles,setProfiles]=useState<{profiles:number;counties:number;towns:number;sources:string[];method:string}|null>(null);
+  const [pubs,setPubs]=useState<{records:number;byNation:Record<string,number>;classification:string;limitations:string;source:string}|null>(null);
   useEffect(() => {
     if (!open || check) return;
     fetch(`${APP_CONFIG.dataBaseUrl}/crosscheck.json`).then((r) => (r.ok ? r.json() : null)).then(setCheck, () => {});
     fetch(`${APP_CONFIG.dataBaseUrl}/places/meta.json`).then((r) => (r.ok ? r.json() : null)).then(setPlaces, () => {});
+    fetch(`${APP_CONFIG.dataBaseUrl}/profiles/meta.json`).then((r)=>(r.ok?r.json():null)).then(setProfiles,()=>{});
+    fetch(`${APP_CONFIG.dataBaseUrl}/pubs/meta.json`).then((r)=>(r.ok?r.json():null)).then(setPubs,()=>{});
   }, [open, check]);
   useEffect(() => {
     const d = ref.current;
@@ -148,6 +152,8 @@ export function AboutDialog({ open, onClose, manifest }: { open: boolean; onClos
               <p>ONS mid-2024 estimates supply population and age for England and Wales. Census 2021 supplies tenure, housing types and overcrowding. LSOA totals are allocated to postal regions by current postcode shares, so these are estimates, not official postcode statistics or live population counts. Scotland is unavailable.</p>
               <p>© Ofcom, Connected Nations Spring 2026: January 2026 residential coverage shows the mean of matched postcode availability percentages. It is not premises-weighted and does not measure experienced speeds. Dates, sources and definitions appear beside each measure.</p>
             </Block>
+            {profiles&&<Block title="County, council, town and city profiles"><p>{profiles.profiles.toLocaleString()} searchable profiles: {profiles.counties.toLocaleString()} England/Wales council areas and {profiles.towns.toLocaleString()} ONS built-up areas. Census 2021 LSOA counts are allocated by each geography’s share of active ONSPD postcodes in that LSOA; these are useful estimates, not official postcode statistics.</p><p>{profiles.sources.join(' · ')}. Scotland remains available through postcode-level dashboard data, but equivalent town/council Census profiles are not mixed into this England/Wales series.</p></Block>}
+            {pubs&&<Block title="UK pubs, bars and nightclubs"><p>{pubs.records.toLocaleString()} geocoded establishments classified by the Food Standards Agency as Pub/bar/nightclub: {Object.entries(pubs.byNation).map(([k,v])=>`${v.toLocaleString()} ${k}`).join(', ')}.</p><p>{pubs.limitations} Food hygiene ratings describe inspection results, not venue quality. <a href="https://ratings.food.gov.uk/open-data" target="_blank" rel="noreferrer" className="underline">Official open data</a>.</p></Block>}
             <Block title="Recorded crime">
               <p>Police.uk, September 2025 to August 2026, with the previous twelve months for trends. Anonymised locations are assigned to approximate postal boundaries. Counts exclude antisocial behaviour, which has a separate measure. British Transport Police records are excluded to avoid mixing territorial coverage.</p>
               <p>Rates use estimated mid-2024 residents. City centres can have high rates because visitors are not counted as residents. These are recorded events, not a personal safety prediction. Regions with missing police-force months, including Greater Manchester and Gloucester in this snapshot, are unavailable; grey does not mean zero crime.</p>

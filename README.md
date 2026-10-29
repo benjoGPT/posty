@@ -110,6 +110,12 @@ One-off reference steps, only needed when upgrading those inputs:
 `npm run data:land` (coastline), `npm run data:admin` (council and country
 borders) and `npm run data:glyphs` (label fonts).
 
+Dashboard geography and venues are rebuilt with `npm run data:profiles`. This
+uses official ONSPD, ONS built-up-area names, Nomis Census 2021 bulk tables and
+the daily Food Standards Agency open register. Generated profiles cover 318
+England/Wales council areas and 7,749 built-up areas; the pub register covers
+the four UK nations. The interface always shows source periods and limitations.
+
 ## Deploy
 
 `npm run build` writes a fully static site to `out/`, including the data. Host it

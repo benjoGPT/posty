@@ -1,0 +1,13 @@
+{
+  "generated": "2026-10-29T13:07:11Z",
+  "profiles": 8067,
+  "counties": 318,
+  "towns": 7749,
+  "sourcePostcodes": 1586404,
+  "sources": [
+    "ONS Postcode Directory August 2026",
+    "ONS Built-up Areas April 2024 names and codes",
+    "Census 2021 bulk tables via Nomis"
+  ],
+  "method": "LSOA Census counts allocated by each target geography share of active postcodes in that LSOA. At least 98% table coverage required."
+}

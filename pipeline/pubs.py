@@ -18,7 +18,7 @@ with path.open('rb') as raw:
   except:continue
   if not (-9.5<=lng<=2.5 and 49<=lat<=61.5):continue
   pc=''.join(r.get('PostCode','').upper().split());g=geog.get(pc,{})
-  nation=g.get('country') or ('Northern Ireland' if pc.startswith('BT') else 'Scotland' if 'information' in r.get('SchemeType','').lower() else 'England')
+  nation=g.get('country') or ('Northern Ireland' if pc.startswith('BT') else 'Scotland' if r.get('SchemeType')=='FHIS' else 'England')
   nations[nation]+=1
   county=names.get(('county',g.get('county','')));town=names.get(('town',g.get('town','')))
   if g.get('county'):counts[('county',g['county'])]+=1
