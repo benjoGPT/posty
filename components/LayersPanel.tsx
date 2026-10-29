@@ -44,6 +44,7 @@ const COLOUR_MODES: { id: ColourMode; label: string; hint: string }[] = [
 ];
 
 const PLACE_TOGGLES: { key: keyof PlaceToggles; icon: string; label: string }[] = [
+  {key:'pubs',icon:'pubs',label:'Pubs, bars and nightclubs'},
   {key:'supermarkets',icon:'supermarkets',label:'Supermarkets'},
   {key:'pharmacies',icon:'pharmacies',label:'Pharmacies'},
   {key:'parks',icon:'parks',label:'Green spaces'},
@@ -163,7 +164,7 @@ export function LayersPanel(p: Props) {
 
         {tab === 'places' && <>
           <p className="px-4 pt-4 text-[12px] leading-relaxed text-muted">Show nearby places in SY, TF, WV and DY. Zoom in to see markers. These toggles can be combined.</p>
-          {(['Transport', 'Everyday services', 'Community and green space'] as const).map(group => <Group key={group} title={group}><div className="space-y-1">{PLACE_TOGGLES.filter(t => group === 'Transport' ? ['stations', 'stops'].includes(t.key) : group === 'Everyday services' ? ['supermarkets', 'pharmacies', 'gps'].includes(t.key) : ['parks', 'schools', 'postboxes'].includes(t.key)).map(({ key, icon, label }) => <label key={key} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-hover"><span className="size-3 rounded-full" style={{ background: PLACE_STYLE[icon].colour }} aria-hidden /><span className="flex-1 text-[13px] font-medium">{label}</span><input type="checkbox" checked={p.places[key]} onChange={e => p.onPlaces({ ...p.places, [key]: e.target.checked })} className="size-4 accent-accent" /></label>)}</div></Group>)}
+          {(['Transport', 'Everyday services', 'Community and green space'] as const).map(group => <Group key={group} title={group}><div className="space-y-1">{PLACE_TOGGLES.filter(t => group === 'Transport' ? ['stations', 'stops'].includes(t.key) : group === 'Everyday services' ? ['pubs','supermarkets', 'pharmacies', 'gps'].includes(t.key) : ['parks', 'schools', 'postboxes'].includes(t.key)).map(({ key, icon, label }) => <label key={key} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-hover"><span className="size-3 rounded-full" style={{ background: PLACE_STYLE[icon].colour }} aria-hidden /><span className="flex-1 text-[13px] font-medium">{label}</span><input type="checkbox" checked={p.places[key]} onChange={e => p.onPlaces({ ...p.places, [key]: e.target.checked })} className="size-4 accent-accent" /></label>)}</div></Group>)}
           <p className="px-4 py-4 text-[11.5px] leading-relaxed text-muted">Overture Maps and OpenStreetMap listings can be incomplete. Green-space points are mapped centres, not entrances or guarantees of public access.</p>
         </>}
 

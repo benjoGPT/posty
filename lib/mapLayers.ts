@@ -311,7 +311,7 @@ export function applyColourMode(map: MlMap, mode: ColourMode, theme: Theme): voi
 export interface BorderOptions { countries: boolean; councils: boolean; flood?: boolean }
 
 /** Nearby-place layers that can be switched on. */
-export type PlaceToggles = { postboxes: boolean; stations: boolean; schools: boolean; gps: boolean; stops: boolean; supermarkets: boolean; pharmacies: boolean; parks: boolean };
+export type PlaceToggles = { postboxes: boolean; stations: boolean; schools: boolean; gps: boolean; stops: boolean; supermarkets: boolean; pharmacies: boolean; parks: boolean; pubs: boolean };
 export const PLACES_SOURCE = 'pc-places';
 export const PLACE_STYLE: Record<string, { colour: string; label: string }> = {
   postboxes: { colour: '#d0312d', label: 'Postbox' },
@@ -324,6 +324,7 @@ export const PLACE_STYLE: Record<string, { colour: string; label: string }> = {
   pharmacies: {colour:'#358525',label:'Pharmacy'},
   parks: {colour:'#357d55',label:'Mapped green space'},
   gps: { colour: '#008300', label: 'GP surgery' },
+  pubs: { colour: '#9a5a24', label: 'Pub, bar or nightclub' },
 };
 
 /** Draws a small round pictogram for a place type (retina-sized RGBA image). */

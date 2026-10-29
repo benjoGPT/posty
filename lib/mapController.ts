@@ -15,6 +15,7 @@ import {metricFor} from './metrics';
 import {metricOverlayLayer,type MetricOverlay} from './mapOverlays';
 import {crimeLabel,monthLabel,type CrimeRecord} from './crime';
 import type { NamedTarget } from './namedSearch';
+import {directionsUrl,loadPubs,type PubRecord} from './pubs';
 import { areaOf, districtOf } from './postcode';
 import type { RegionKind, Selection } from './search';
 
@@ -97,6 +98,9 @@ export class MapController {
   private selection: Selection | null = null;
   private marker: maplibregl.Marker | null = null;
   private crimeMarker: maplibregl.Marker | null = null;
+  private pubMarker: maplibregl.Marker | null = null;
+  private pubRecords: PubRecord[] = [];
+  private pubsLoading = false;
   private metricOverlays:MetricOverlay[]=[];
   private crimeRecords: CrimeRecord[] = [];
   private searchMarker: maplibregl.Marker | null = null;
@@ -187,6 +191,7 @@ export class MapController {
     this.meMarker?.remove();
     this.searchMarker?.remove();
     this.crimeMarker?.remove();
+    this.pubMarker?.remove();
     this.map.remove();
   }
 
@@ -212,6 +217,7 @@ export class MapController {
     this.render();
     this.applySelection();
     this.renderCrimes();
+    void this.syncPubs();
     this.renderMetricOverlays();
     void this.refresh();
   }
@@ -316,6 +322,25 @@ export class MapController {
     this.placesKey = '';
     void this.refresh();
     this.scheduleRender();
+    void this.syncPubs();
+  }
+
+  private async syncPubs():Promise<void>{
+    if(!this.map.getLayer('units-circle'))return;
+    if(!this.opts.places.pubs){for(const id of ['pub-cluster-count','pub-clusters','pub-points'])if(this.map.getLayer(id))this.map.removeLayer(id);if(this.map.getSource('pubs'))this.map.removeSource('pubs');return;}
+    if(!this.pubRecords.length&&!this.pubsLoading){this.pubsLoading=true;try{this.pubRecords=await loadPubs(this.data.baseUrl);}catch{this.opts.callbacks.onError('The UK pub register could not be loaded.');}finally{this.pubsLoading=false;}}
+    if(!this.opts.places.pubs||!this.pubRecords.length||this.map.getSource('pubs'))return;
+    const features=this.pubRecords.map((p,i)=>({type:'Feature' as const,geometry:{type:'Point' as const,coordinates:[p.lng,p.lat]},properties:{index:i,name:p.name,rating:p.rating,postcode:p.postcode}}));
+    this.map.addSource('pubs',{type:'geojson',data:{type:'FeatureCollection',features},cluster:true,clusterRadius:45,clusterMaxZoom:14,attribution:'Venue register: Food Standards Agency open data'});
+    this.map.addLayer({id:'pub-clusters',type:'circle',source:'pubs',filter:['has','point_count'],paint:{'circle-radius':['step',['get','point_count'],14,20,18,100,23],'circle-color':'#9a5a24','circle-stroke-color':'#fff','circle-stroke-width':2}});
+    this.map.addLayer({id:'pub-cluster-count',type:'symbol',source:'pubs',filter:['has','point_count'],layout:{'text-field':['get','point_count_abbreviated'],'text-font':['Noto Sans Regular'],'text-size':11,'text-allow-overlap':true},paint:{'text-color':'#fff'}});
+    this.map.addLayer({id:'pub-points',type:'circle',source:'pubs',filter:['!', ['has','point_count']],paint:{'circle-radius':6,'circle-color':'#9a5a24','circle-stroke-color':'#fff','circle-stroke-width':2}});
+  }
+
+  focusPub(pub:PubRecord):void{
+    this.pubMarker?.remove();const root=document.createElement('div'),title=document.createElement('strong'),address=document.createElement('p'),rating=document.createElement('p'),directions=document.createElement('a');
+    title.textContent=pub.name;address.textContent=`${pub.address} · ${pub.postcode}`;rating.textContent=`Food hygiene: ${pub.rating}`;directions.textContent='Directions';directions.href=directionsUrl(pub);directions.target='_blank';directions.rel='noreferrer';directions.className='underline';root.append(title,address,rating,directions);
+    this.pubMarker=new maplibregl.Marker({color:'#9a5a24'}).setLngLat([pub.lng,pub.lat]).setPopup(new maplibregl.Popup({offset:25,maxWidth:'280px'}).setDOMContent(root)).addTo(this.map);this.map.flyTo({center:[pub.lng,pub.lat],zoom:16,padding:{top:120,left:40,right:40,bottom:100},duration:this.duration(650)});this.pubMarker.togglePopup();
   }
 
   /** Hides postcode labels (used by the quiz). */
@@ -603,6 +628,7 @@ export class MapController {
   }
 
   private onClick(e: MapMouseEvent): void {
+    if(this.map.getLayer('pub-points')){const hit=this.map.queryRenderedFeatures(e.point,{layers:['pub-points','pub-clusters']})[0];if(hit){if(hit.properties.cluster){const source=this.map.getSource('pubs') as GeoJSONSource;void source.getClusterExpansionZoom(hit.properties.cluster_id).then(zoom=>this.map.easeTo({center:(hit.geometry as Point).coordinates as [number,number],zoom,duration:this.duration(400)})).catch(()=>{});}else{const pub=this.pubRecords[Number(hit.properties.index)];if(pub)this.focusPub(pub);}return;}}
     if(this.map.getLayer('crime-points')){
       const hits=this.map.queryRenderedFeatures(e.point,{layers:['crime-points','crime-clusters']});
       const hit=hits[0];

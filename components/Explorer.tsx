@@ -31,6 +31,7 @@ import { MapControls } from './MapControls';
 import { BottomSheet, SHEET_PEEK, SidePanel } from './PanelShell';
 import { Quiz } from './Quiz';
 import { SearchBox, type NavResult, type NavTarget, type SearchBoxHandle } from './SearchBox';
+import type {PubRecord} from '@/lib/pubs';
 
 const MOBILE_QUERY = '(max-width: 767px)';
 function useIsMobile() {
@@ -48,7 +49,7 @@ const DEFAULT_PREFS: Prefs = {
   basemap: 'light',
   colourMode: 'colours',
   borders: { countries: true, councils: false },
-  places: { stations: true, postboxes: false, schools: false, gps: false, stops: false, supermarkets: false, pharmacies: false, parks: false },
+  places: { stations: true, postboxes: false, schools: false, gps: false, stops: false, supermarkets: false, pharmacies: false, parks: false, pubs: false },
   recent: [],
 };
 
@@ -448,7 +449,7 @@ export default function Explorer() {
   return (
     <main className="fixed inset-0 flex overflow-hidden">
       {data&&compareOpen&&<CompareAreas data={data} areas={compared} open={compareOpen} onClose={()=>setCompareOpen(false)} onClear={()=>{setCompared([]);setCompareOpen(false)}} onChange={setCompared}/>}
-      {data&&dashboardOpen&&<DataDashboard data={data} initialArea={selection?areaOf(selection.code):view?.centreArea??undefined} initialCode={selection?.kind==='unit'?districtOf(selection.code):selection?.code} renderCrime={target=><CrimeExplorer data={data} selection={target?target as Selection:selection} named={target?null:named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={r=>{setDashboardOpen(false);locateCrime(r);}}/>} onClose={()=>setDashboardOpen(false)} onMap={(code,kind)=>{setDashboardOpen(false);void navigate({kind:kind as 'area'|'district'|'sector',code});}} onCompare={areas=>{setCompared(areas);setCompareOpen(true);}}/>}
+      {data&&dashboardOpen&&<DataDashboard data={data} initialArea={selection?areaOf(selection.code):view?.centreArea??undefined} initialCode={selection?.kind==='unit'?districtOf(selection.code):selection?.code} renderCrime={target=><CrimeExplorer data={data} selection={target?target as Selection:selection} named={target?null:named} getCentre={getCrimeCentre} onRecords={showCrimeRecords} onLocate={r=>{setDashboardOpen(false);locateCrime(r);}}/>} onClose={()=>setDashboardOpen(false)} onMap={(code,kind)=>{setDashboardOpen(false);void navigate({kind:kind as 'area'|'district'|'sector',code});}} onLocate={target=>{setDashboardOpen(false);ctrl.current?.flyTo(target.lng,target.lat,target.kind==='town'?12:9,padding(false));}} onPub={(pub:PubRecord)=>{setDashboardOpen(false);if(!prefs.places.pubs)changePlaces({...prefs.places,pubs:true});ctrl.current?.focusPub(pub);}} onCompare={areas=>{setCompared(areas);setCompareOpen(true);}}/>}
       {layersOpen && (!isMobile||fullMenu) && (
         <OptionsSidebar fullScreen={fullMenu} onClose={() => setLayersOpen(false)}>{layers}</OptionsSidebar>
       )}
